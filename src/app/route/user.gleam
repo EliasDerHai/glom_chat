@@ -18,6 +18,10 @@ fn list_users() -> Response {
   |> wisp.html_body(string_tree.from_string("users!"))
 }
 
+/// {
+///   "user_name": "John",
+///   "email": "john.boy@gleam.com"
+/// }
 pub type CreateUserDto {
   User(user_name: String, email: String)
 }
