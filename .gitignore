@@ -3,4 +3,5 @@
 /build
 erl_crash.dump
 
-/scripts/migrate_wsl.sh
+/scripts
+.envrc
