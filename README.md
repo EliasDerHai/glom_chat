@@ -4,14 +4,28 @@
 
 **setup:**
 
-set `DATABASE_URL` then
+set `DATABASE_URL` 
+
+**migrate:**
+
 ```sh
 gleam run -m cigogne last
+```
+
+**prepare queries:**
+
+```sh
+gleam run -m squirrel
 ```
 
 **run:**
 
 ```sh
-gleam run   # Run the project
-gleam test  # Run the tests
+gleam run
+```
+
+**test:**
+
+```sh
+gleam test
 ```
