@@ -9,6 +9,50 @@ import pog
 import wisp.{type Request, type Response}
 import youid/uuid
 
+// ################################################################################
+// Entity
+// ################################################################################
+
+pub type UserEntity {
+  UserEntity(
+    id: uuid.Uuid,
+    user_name: String,
+    email: String,
+    email_verified: Bool,
+  )
+}
+
+pub fn to_json(user: UserEntity) -> json.Json {
+  json.object([
+    #("id", uuid.to_string(user.id) |> json.string()),
+    #("user_name", json.string(user.user_name)),
+    #("email", json.string(user.email)),
+    #("email_verified", json.bool(user.email_verified)),
+  ])
+}
+
+// ################################################################################
+// Dto
+// ################################################################################
+
+/// {
+///   "user_name": "John",
+///   "email": "john.boy@gleam.com"
+/// }
+pub type CreateUserDto {
+  CreateUserDto(user_name: String, email: String)
+}
+
+fn decode_user() -> decode.Decoder(CreateUserDto) {
+  use user_name <- decode.field("user_name", decode.string)
+  use email <- decode.field("email", decode.string)
+  decode.success(CreateUserDto(user_name:, email:))
+}
+
+// ################################################################################
+// Functions
+// ################################################################################
+
 pub fn users(req: Request, db: DbPool) -> Response {
   case req.method {
     Get -> list_users(db)
@@ -20,20 +64,6 @@ pub fn users(req: Request, db: DbPool) -> Response {
 fn list_users(db: DbPool) -> Response {
   wisp.ok()
   |> wisp.html_body(string_tree.from_string("users!"))
-}
-
-/// {
-///   "user_name": "John",
-///   "email": "john.boy@gleam.com"
-/// }
-pub type CreateUserDto {
-  User(user_name: String, email: String)
-}
-
-fn decode_user() -> decode.Decoder(CreateUserDto) {
-  use user_name <- decode.field("user_name", decode.string)
-  use email <- decode.field("email", decode.string)
-  decode.success(User(user_name:, email:))
 }
 
 fn create_user(req: Request, db: DbPool) -> Response {
@@ -53,7 +83,7 @@ fn create_user(req: Request, db: DbPool) -> Response {
       |> result.map_error(fn(_) { Nil }),
     )
 
-    let object =
+    let object: json.Json =
       json.object([
         #("id", uuid.to_string(user_id) |> json.string()),
         #("user_name", json.string(dto.user_name)),

@@ -1,13 +1,27 @@
+import app/domain/user
+import gleam/json
 import gleeunit
+import youid/uuid
 
 pub fn main() -> Nil {
   gleeunit.main()
 }
 
-// gleeunit test functions end in `_test`
-pub fn hello_world_test() {
-  let name = "Joe"
-  let greeting = "Hello, " <> name <> "!"
+pub fn user_to_json_test() {
+  // arrange 
+  let id = uuid.v7()
+  let input = user.UserEntity(id, "John", "john.boy@gleamer.com", False)
 
-  assert greeting == "Hello, Joe!"
+  // act
+  let actual = input |> user.to_json()
+
+  // assert
+  let expecation =
+    json.object([
+      #("id", uuid.to_string(id) |> json.string()),
+      #("user_name", json.string("John")),
+      #("email", json.string("john.boy@gleamer.com")),
+      #("email_verified", json.bool(False)),
+    ])
+  assert expecation == actual
 }

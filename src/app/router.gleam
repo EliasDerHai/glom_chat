@@ -1,5 +1,5 @@
+import app/domain/user
 import app/persist/setup.{type DbPool}
-import app/route/user
 import app/web
 import gleam/http.{Get}
 import wisp.{type Request, type Response}
