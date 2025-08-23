@@ -1,3 +1,4 @@
+import app/persist/setup
 import app/router
 import gleam/erlang/process
 import mist
@@ -13,9 +14,14 @@ pub fn main() {
   // load this from somewhere so that it is not regenerated on every restart.
   let secret_key_base = wisp.random_string(64)
 
+  // Start the database connection pool supervisor.
+  let #(_supervisor, db) = setup.start()
+
+  let handler = router.handle_request_with_db(db)
+
   // Start the Mist web server.
   let assert Ok(_) =
-    wisp_mist.handler(router.handle_request, secret_key_base)
+    wisp_mist.handler(handler, secret_key_base)
     |> mist.new
     |> mist.port(8000)
     |> mist.start

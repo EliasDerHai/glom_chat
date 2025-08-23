@@ -5,9 +5,15 @@ import gleam/otp/static_supervisor
 import gleam/result
 import pog
 
-pub fn start() -> actor.Started(static_supervisor.Supervisor) {
+pub type DbPool {
+  DbPool(name: Name(pog.Message))
+}
+
+pub fn start() -> #(actor.Started(static_supervisor.Supervisor), DbPool) {
+  let name = process.new_name("pog")
+
   let child =
-    process.new_name("pog")
+    name
     |> config
     |> pog.supervised
 
@@ -17,7 +23,7 @@ pub fn start() -> actor.Started(static_supervisor.Supervisor) {
     |> static_supervisor.start
     as "db supervisor failed"
 
-  started
+  #(started, DbPool(name))
 }
 
 fn config(name: Name(pog.Message)) -> pog.Config {

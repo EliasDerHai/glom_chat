@@ -1,9 +1,14 @@
+import app/persist/setup.{type DbPool}
 import app/route/user
 import app/web
 import gleam/http.{Get}
 import wisp.{type Request, type Response}
 
-pub fn handle_request(req: Request) -> Response {
+pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
+  fn(req) { handle_request(req, db) }
+}
+
+fn handle_request(req: Request, db: DbPool) -> Response {
   use req <- web.middleware(req)
 
   case wisp.path_segments(req) {
@@ -11,11 +16,11 @@ pub fn handle_request(req: Request) -> Response {
     [] -> hello(req)
 
     // This matches `/users`.
-    ["users"] -> user.users(req)
+    ["users"] -> user.users(req, db)
 
     // This matches `/users/:id`.
     // The `id` segment is bound to a variable and passed to the handler.
-    ["users", id] -> user.user(req, id)
+    ["users", id] -> user.user(req, db, id)
 
     _ -> wisp.not_found()
   }
