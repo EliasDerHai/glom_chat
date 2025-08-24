@@ -15,7 +15,7 @@ pub fn main() {
   let secret_key_base = wisp.random_string(64)
 
   // Start the database connection pool supervisor.
-  let #(_supervisor, db) = setup.start()
+  let #(_supervisor, db) = setup.new_supervisor_with_pool()
 
   let handler = router.handle_request_with_db(db)
 

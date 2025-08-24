@@ -3,6 +3,7 @@ import app/persist/sql
 import gleam/dynamic/decode
 import gleam/http.{Get, Post}
 import gleam/json
+import gleam/list
 import gleam/result
 import gleam/string_tree
 import pog
@@ -31,6 +32,14 @@ pub fn to_json(user: UserEntity) -> json.Json {
   ])
 }
 
+pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
+  UserEntity(el.id, el.user_name, el.email, el.email_verified)
+}
+
+pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
+  UserEntity(el.id, el.user_name, el.email, el.email_verified)
+}
+
 // ################################################################################
 // Dto
 // ################################################################################
@@ -50,7 +59,7 @@ fn decode_user() -> decode.Decoder(CreateUserDto) {
 }
 
 // ################################################################################
-// Functions
+// Helpers
 // ################################################################################
 
 pub fn users(req: Request, db: DbPool) -> Response {
@@ -62,8 +71,19 @@ pub fn users(req: Request, db: DbPool) -> Response {
 }
 
 fn list_users(db: DbPool) -> Response {
-  wisp.ok()
-  |> wisp.html_body(string_tree.from_string("users!"))
+  case
+    db
+    |> setup.conn()
+    |> sql.select_users()
+  {
+    Error(_) -> wisp.internal_server_error()
+    Ok(r) -> {
+      list.map(r.rows, from_select_users_row)
+      |> json.array(fn(el) { el |> to_json })
+      |> json.to_string_tree
+      |> wisp.json_response(201)
+    }
+  }
 }
 
 fn create_user(req: Request, db: DbPool) -> Response {
@@ -79,29 +99,54 @@ fn create_user(req: Request, db: DbPool) -> Response {
 
     use _ <- result.try(
       conn
-      |> sql.insert_user(user_id, dto.user_name, dto.email, False)
+      |> sql.create_user(user_id, dto.user_name, dto.email, False)
       |> result.map_error(fn(_) { Nil }),
     )
 
-    let object: json.Json =
-      json.object([
-        #("id", uuid.to_string(user_id) |> json.string()),
-        #("user_name", json.string(dto.user_name)),
-        #("email", json.string(dto.email)),
-        #("email_verified", json.string("false")),
-      ])
-    Ok(json.to_string_tree(object))
+    Ok(UserEntity(user_id, dto.user_name, dto.email, False))
   }
 
   case result {
     Error(_) -> wisp.bad_request()
-    Ok(json) -> wisp.json_response(json, 201)
+    Ok(entity) ->
+      to_json(entity) |> json.to_string_tree |> wisp.json_response(201)
   }
+}
+
+pub type UserGetRequestError {
+  BadUuid
+  IdNotFound
+  DbErr
 }
 
 pub fn user(req: Request, db: DbPool, id: String) -> Response {
   use <- wisp.require_method(req, Get)
 
-  wisp.ok()
-  |> wisp.html_body(string_tree.from_string("user with id " <> id))
+  let pipeline: Result(string_tree.StringTree, UserGetRequestError) =
+    uuid.from_string(id)
+    |> result.map_error(fn(_) { BadUuid })
+    |> result.try(fn(uuid) {
+      db
+      |> setup.conn()
+      |> sql.select_user(uuid)
+      |> result.map_error(fn(_) { DbErr })
+    })
+    |> result.try(fn(res) {
+      res.rows
+      |> list.first
+      |> result.map_error(fn(_) { IdNotFound })
+    })
+    |> result.map(fn(row) {
+      row
+      |> from_select_user_row
+      |> to_json
+      |> json.to_string_tree
+    })
+
+  case pipeline {
+    Ok(body) -> wisp.json_response(body, 201)
+    Error(BadUuid) -> wisp.bad_request()
+    Error(DbErr) -> wisp.internal_server_error()
+    Error(IdNotFound) -> wisp.not_found()
+  }
 }

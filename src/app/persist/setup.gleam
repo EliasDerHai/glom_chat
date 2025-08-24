@@ -9,7 +9,10 @@ pub type DbPool {
   DbPool(name: Name(pog.Message))
 }
 
-pub fn start() -> #(actor.Started(static_supervisor.Supervisor), DbPool) {
+pub fn new_supervisor_with_pool() -> #(
+  actor.Started(static_supervisor.Supervisor),
+  DbPool,
+) {
   let name = process.new_name("pog")
 
   let child =
@@ -33,7 +36,11 @@ fn config(name: Name(pog.Message)) -> pog.Config {
   |> pog.pool_size(15)
 }
 
-pub fn read_connection_uri(name: Name(pog.Message)) -> Result(pog.Config, Nil) {
+fn read_connection_uri(name: Name(pog.Message)) -> Result(pog.Config, Nil) {
   use database_url <- result.try(envoy.get("DATABASE_URL"))
   pog.url_config(name, database_url)
+}
+
+pub fn conn(db: DbPool) {
+  pog.named_connection(db.name)
 }
