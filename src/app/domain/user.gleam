@@ -1,11 +1,10 @@
-import app/persist/setup.{type DbPool}
+import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/dynamic/decode
 import gleam/http.{Get, Post}
 import gleam/json
 import gleam/list
 import gleam/result
-import gleam/string_tree
 import pog
 import wisp.{type Request, type Response}
 import youid/uuid
@@ -59,7 +58,7 @@ fn decode_user() -> decode.Decoder(CreateUserDto) {
 }
 
 // ################################################################################
-// Helpers
+// Endpoint-handler
 // ################################################################################
 
 pub fn users(req: Request, db: DbPool) -> Response {
@@ -73,7 +72,7 @@ pub fn users(req: Request, db: DbPool) -> Response {
 fn list_users(db: DbPool) -> Response {
   case
     db
-    |> setup.conn()
+    |> pool.conn()
     |> sql.select_users()
   {
     Error(_) -> wisp.internal_server_error()
@@ -113,40 +112,34 @@ fn create_user(req: Request, db: DbPool) -> Response {
   }
 }
 
-pub type UserGetRequestError {
-  BadUuid
-  IdNotFound
-  DbErr
-}
-
-pub fn user(req: Request, db: DbPool, id: String) -> Response {
+pub fn fetch_user(req: Request, db: DbPool, id: String) -> Response {
   use <- wisp.require_method(req, Get)
 
-  let pipeline: Result(string_tree.StringTree, UserGetRequestError) =
-    uuid.from_string(id)
-    |> result.map_error(fn(_) { BadUuid })
-    |> result.try(fn(uuid) {
-      db
-      |> setup.conn()
-      |> sql.select_user(uuid)
-      |> result.map_error(fn(_) { DbErr })
-    })
-    |> result.try(fn(res) {
-      res.rows
-      |> list.first
-      |> result.map_error(fn(_) { IdNotFound })
-    })
-    |> result.map(fn(row) {
-      row
-      |> from_select_user_row
-      |> to_json
-      |> json.to_string_tree
-    })
+  let pipeline = {
+    use id <- result.try(
+      uuid.from_string(id) |> result.map_error(fn(_) { wisp.bad_request() }),
+    )
 
-  case pipeline {
-    Ok(body) -> wisp.json_response(body, 201)
-    Error(BadUuid) -> wisp.bad_request()
-    Error(DbErr) -> wisp.internal_server_error()
-    Error(IdNotFound) -> wisp.not_found()
+    use query_result <- result.try(
+      db
+      |> pool.conn()
+      |> sql.select_user(id)
+      |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    )
+
+    use entity <- result.try(
+      query_result.rows
+      |> list.first
+      |> result.map_error(fn(_) { wisp.not_found() }),
+    )
+
+    entity
+    |> from_select_user_row
+    |> to_json
+    |> json.to_string_tree
+    |> wisp.json_response(201)
+    |> Ok
   }
+
+  result.unwrap_both(pipeline)
 }

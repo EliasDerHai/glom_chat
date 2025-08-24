@@ -1,4 +1,4 @@
-import app/persist/setup
+import app/persist/pool
 import app/router
 import gleam/erlang/process
 import mist
@@ -15,7 +15,7 @@ pub fn main() {
   let secret_key_base = wisp.random_string(64)
 
   // Start the database connection pool supervisor.
-  let #(_supervisor, db) = setup.new_supervisor_with_pool()
+  let #(_supervisor, db) = pool.new_supervisor_with_pool()
 
   let handler = router.handle_request_with_db(db)
 
