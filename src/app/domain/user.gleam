@@ -1,25 +1,20 @@
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/dynamic/decode
-import gleam/http.{Get, Post}
+import gleam/http.{Delete, Get, Post}
 import gleam/json
 import gleam/list
 import gleam/result
 import pog
 import wisp.{type Request, type Response}
-import youid/uuid
+import youid/uuid.{type Uuid}
 
 // ################################################################################
 // Entity
 // ################################################################################
 
 pub type UserEntity {
-  UserEntity(
-    id: uuid.Uuid,
-    user_name: String,
-    email: String,
-    email_verified: Bool,
-  )
+  UserEntity(id: Uuid, user_name: String, email: String, email_verified: Bool)
 }
 
 pub fn to_json(user: UserEntity) -> json.Json {
@@ -61,6 +56,7 @@ fn decode_user() -> decode.Decoder(CreateUserDto) {
 // Endpoint-handler
 // ################################################################################
 
+/// `/users` endpoint
 pub fn users(req: Request, db: DbPool) -> Response {
   case req.method {
     Get -> list_users(db)
@@ -112,34 +108,57 @@ fn create_user(req: Request, db: DbPool) -> Response {
   }
 }
 
-pub fn fetch_user(req: Request, db: DbPool, id: String) -> Response {
-  use <- wisp.require_method(req, Get)
-
-  let pipeline = {
+/// `/users/:id` endpoint
+pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
+  {
     use id <- result.try(
-      uuid.from_string(id) |> result.map_error(fn(_) { wisp.bad_request() }),
+      uuid.from_string(id_str)
+      |> result.map_error(fn(_) { wisp.bad_request() }),
     )
 
-    use query_result <- result.try(
-      db
-      |> pool.conn()
-      |> sql.select_user(id)
-      |> result.map_error(fn(_) { wisp.internal_server_error() }),
-    )
-
-    use entity <- result.try(
-      query_result.rows
-      |> list.first
-      |> result.map_error(fn(_) { wisp.not_found() }),
-    )
-
-    entity
-    |> from_select_user_row
-    |> to_json
-    |> json.to_string_tree
-    |> wisp.json_response(201)
-    |> Ok
+    case req.method {
+      Get -> fetch_user(db, id)
+      Delete -> delete_user(db, id)
+      _ ->
+        wisp.method_not_allowed([Get, Delete])
+        |> Error
+    }
   }
+  |> result.unwrap_both
+}
 
-  result.unwrap_both(pipeline)
+fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+  use query_result <- result.try(
+    db
+    |> pool.conn()
+    |> sql.select_user(id)
+    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+  )
+
+  use entity <- result.try(
+    query_result.rows
+    |> list.first
+    |> result.map_error(fn(_) { wisp.not_found() }),
+  )
+
+  entity
+  |> from_select_user_row
+  |> to_json
+  |> json.to_string_tree
+  |> wisp.json_response(201)
+  |> Ok
+}
+
+fn delete_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+  use query_result <- result.try(
+    db
+    |> pool.conn()
+    |> sql.delete_user(id)
+    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+  )
+
+  case query_result.count {
+    1 -> Ok(wisp.ok())
+    _ -> Error(wisp.not_found())
+  }
 }

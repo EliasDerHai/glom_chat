@@ -29,6 +29,23 @@ VALUES ($1, $2, $3, $4);
   |> pog.execute(db)
 }
 
+/// Runs the `delete_user` query
+/// defined in `./src/app/persist/sql/delete_user.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn delete_user(db, arg_1) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "DELETE FROM users WHERE id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_user` query
 /// defined in `./src/app/persist/sql/select_user.sql`.
 ///

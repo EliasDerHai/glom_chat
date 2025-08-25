@@ -11,8 +11,6 @@ pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
 fn handle_request(req: Request, db: DbPool) -> Response {
   use req <- web.middleware(req)
 
-  echo req
-
   case wisp.path_segments(req) {
     // This matches `/`.
     [] -> hello(req)
@@ -22,7 +20,7 @@ fn handle_request(req: Request, db: DbPool) -> Response {
 
     // This matches `/users/:id`.
     // The `id` segment is bound to a variable and passed to the handler.
-    ["users", id] -> user.fetch_user(req, db, id)
+    ["users", id] -> user.user(req, db, id)
 
     _ -> wisp.not_found()
   }
