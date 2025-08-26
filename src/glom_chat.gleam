@@ -1,5 +1,6 @@
+import app/http_router
 import app/persist/pool
-import app/router
+import app/websocket
 import gleam/erlang/process
 import gleam/http/request
 import gleam/io
@@ -11,13 +12,8 @@ import wisp/wisp_mist
 pub fn main() {
   wisp.configure_logger()
 
-  // TODO: why do we need this?
-  let secret_key_base = wisp.random_string(64)
-
   // database connection pool supervisor
   let #(_supervisor, db) = pool.new_supervisor_with_pool()
-
-  let handler = router.handle_request_with_db(db)
 
   let assert Ok(_) =
     fn(req) {
@@ -29,10 +25,14 @@ pub fn main() {
             request: req,
             on_init: fn(_conn) { #(Nil, option.None) },
             on_close: fn(_state) { io.println("bye!") },
-            handler: handle_ws_message,
+            handler: websocket.handle_ws_message,
           )
 
-        _ -> wisp_mist.handler(handler, secret_key_base)(req)
+        _ ->
+          wisp_mist.handler(
+            http_router.handle_request_with_db(db),
+            wisp.random_string(64),
+          )(req)
       }
     }
     |> mist.new
@@ -42,20 +42,4 @@ pub fn main() {
   // The web server runs in new Erlang process, so put this one to sleep while
   // it works concurrently.
   process.sleep_forever()
-}
-
-/// echo/ping example
-fn handle_ws_message(state, msg, conn) {
-  case msg {
-    mist.Text("ping") -> {
-      let _ = mist.send_text_frame(conn, "pong")
-      mist.continue(state)
-    }
-    mist.Text(text) -> {
-      let _ = mist.send_text_frame(conn, "echo: " <> text)
-      mist.continue(state)
-    }
-    mist.Binary(_) | mist.Custom(_) -> mist.continue(state)
-    mist.Closed | mist.Shutdown -> mist.stop()
-  }
 }
