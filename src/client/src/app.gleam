@@ -8,26 +8,16 @@ import gleam/json
 import gleam/list
 import lustre
 import lustre/attribute
+import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/element/keyed
 import lustre/event
-
-// The `Effect` type is used to describe *side effects*: communication with the
-// world outside of our Lustre app. The runtime knows how to handle effects and
-// return their results back to the app.
-import lustre/effect.{type Effect}
-
-// rsvp is a library for making HTTP requests specifically for Lustre. It provides
-// functions for describing requests as effects that can be executed by the runtime.
 import rsvp
 
 // MAIN ------------------------------------------------------------------------
 
 pub fn main() {
-  // In this example we've swapped out the `simple` app constructor for the
-  // `application` constructor instead. This lets us return effects from the
-  // `init` and `update` functions.
   let app = lustre.application(init, update, view)
   let assert Ok(_) = lustre.start(app, "#app", Nil)
 
@@ -43,8 +33,6 @@ type Todo {
   Todo(id: Int, title: String, completed: Bool)
 }
 
-/// Now our app can perform effects, the return type of the `init` and `update`
-/// functions changes to return a tuple.
 fn init(_) -> #(Model, Effect(Msg)) {
   let model = []
   let effect = fetch_todos(on_response: ApiReturnedTodos)
@@ -59,8 +47,6 @@ fn fetch_todos(
   let decoder = decode.list(todo_decoder()) |> decode.map(list.take(_, 10))
   let handler = rsvp.expect_json(decoder, handle_response)
 
-  // When we call `rsvp.get` that doesn't immediately make the request. Instead,
-  // it returns an effect that we give to the runtime to handle for us.
   rsvp.get(url, handler)
 }
 
@@ -82,7 +68,6 @@ type Msg {
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    // When we have no side effects to perform, we return `effect.none()`.
     ApiReturnedTodos(Ok(todos)) -> #(todos, effect.none())
     ApiReturnedTodos(Error(_)) -> #([], effect.none())
 
@@ -110,9 +95,6 @@ fn complete_todo(
   id id: Int,
   completed completed: Bool,
   on_response handle_response: fn(Result(Int, rsvp.Error)) -> msg,
-  // Just like the `Element` type, the `Effect` type is parametrised by the type
-  // of messages it produces. This is how we know messages we get back from an
-  // effect are type-safe and can be handled by the `update` function.
 ) -> Effect(msg) {
   let url = "https://jsonplaceholder.typicode.com/todos/" <> int.to_string(id)
   let handler = rsvp.expect_json(decode.success(id), handle_response)
