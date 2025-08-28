@@ -7,12 +7,12 @@ import gleam/int
 import gleam/json
 import gleam/list
 import lustre
-import lustre/attribute
+import lustre/attribute.{class, name, placeholder, type_}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/element/keyed
-import lustre/event
+import lustre/event.{on_click}
 import rsvp
 
 // MAIN ------------------------------------------------------------------------
@@ -26,126 +26,198 @@ pub fn main() {
 
 // MODEL -----------------------------------------------------------------------
 
-type Model =
-  List(Todo)
+type Model {
+  PreLogin(PreLoginMode)
+  LoggedIn
+}
 
-type Todo {
-  Todo(id: Int, title: String, completed: Bool)
+//type PreLoginMode {
+//  Login(user_name: String, password: String)
+//  Register(
+//    user_name: String,
+//    email: String,
+//    password: String,
+//    password_repeat: String,
+//  )
+//}
+
+type PreLoginMode {
+  Login
+  Register
 }
 
 fn init(_) -> #(Model, Effect(Msg)) {
-  let model = []
-  let effect = fetch_todos(on_response: ApiReturnedTodos)
+  // let effect = fetch_todos(on_response: ApiReturnedTodos)
 
-  #(model, effect)
-}
-
-fn fetch_todos(
-  on_response handle_response: fn(Result(List(Todo), rsvp.Error)) -> msg,
-) -> Effect(msg) {
-  let url = "https://jsonplaceholder.typicode.com/todos/"
-  let decoder = decode.list(todo_decoder()) |> decode.map(list.take(_, 10))
-  let handler = rsvp.expect_json(decoder, handle_response)
-
-  rsvp.get(url, handler)
-}
-
-fn todo_decoder() -> Decoder(Todo) {
-  use id <- decode.field("id", decode.int)
-  use title <- decode.field("title", decode.string)
-  use completed <- decode.field("completed", decode.bool)
-
-  decode.success(Todo(id:, title:, completed:))
+  #(PreLogin(Login), effect.none())
 }
 
 // UPDATE ----------------------------------------------------------------------
 
 type Msg {
-  ApiReturnedTodos(Result(List(Todo), rsvp.Error))
-  ApiUpdatedTodo(Result(Int, rsvp.Error))
-  UserClickedComplete(id: Int, completed: Bool)
+  SetPreLoginMode(PreLoginMode)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
-  case msg {
-    ApiReturnedTodos(Ok(todos)) -> #(todos, effect.none())
-    ApiReturnedTodos(Error(_)) -> #([], effect.none())
-
-    ApiUpdatedTodo(Ok(id)) -> {
-      let todos =
-        list.map(model, fn(item) {
-          case item.id == id {
-            True -> Todo(..item, completed: !item.completed)
-            False -> item
-          }
-        })
-
-      #(todos, effect.none())
-    }
-    ApiUpdatedTodo(Error(_)) -> #(model, effect.none())
-
-    UserClickedComplete(id, completed) -> #(
-      model,
-      complete_todo(id:, completed:, on_response: ApiUpdatedTodo),
-    )
+  let model = case msg {
+    SetPreLoginMode(mode) -> PreLogin(mode)
   }
-}
 
-fn complete_todo(
-  id id: Int,
-  completed completed: Bool,
-  on_response handle_response: fn(Result(Int, rsvp.Error)) -> msg,
-) -> Effect(msg) {
-  let url = "https://jsonplaceholder.typicode.com/todos/" <> int.to_string(id)
-  let handler = rsvp.expect_json(decode.success(id), handle_response)
-  let body = json.object([#("completed", json.bool(completed))])
-
-  case request.to(url) {
-    Ok(request) ->
-      request
-      |> request.set_method(http.Patch)
-      |> request.set_body(json.to_string(body))
-      |> rsvp.send(handler)
-
-    Error(_) -> panic as { "Failed to create request to " <> url }
-  }
+  #(model, effect.none())
 }
 
 // VIEW ------------------------------------------------------------------------
-
 fn view(model: Model) -> Element(Msg) {
-  html.div([attribute.class("p-32 mx-auto w-full max-w-2xl space-y-8")], [
-    html.h1([attribute.class("font-semibold text-2xl")], [html.text("Todo:")]),
-    keyed.ul([attribute.class("flex flex-col gap-2")], {
-      list.map(model, fn(item) {
-        let key = int.to_string(item.id)
-        let html =
-          html.li([], [
-            view_todo(item:, on_complete: UserClickedComplete(item.id, _)),
-          ])
-
-        #(key, html)
-      })
-    }),
-  ])
+  case model {
+    LoggedIn -> html.div([], [html.text("Welcome!")])
+    PreLogin(mode) -> view_login_register(mode)
+  }
 }
 
-fn view_todo(
-  item item: Todo,
-  on_complete handle_complete: fn(Bool) -> msg,
-) -> Element(msg) {
-  html.label([attribute.class("flex gap-2 items-baseline")], [
-    html.p(
-      [
-        attribute.class("flex-1"),
-        attribute.classes([#("line-through text-slate-400", item.completed)]),
-      ],
-      [html.text(item.title)],
-    ),
-    html.input([
-      attribute.type_("checkbox"),
-      attribute.checked(item.completed),
-      event.on_check(handle_complete),
-    ]),
-  ])
+fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
+  let active_toggle_button =
+    class(
+      "flex-1 px-3 py-2 rounded-md text-sm font-medium bg-white text-blue-600 shadow",
+    )
+  let inactive_toggle_button =
+    class(
+      "flex-1 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900",
+    )
+
+  html.div(
+    [class("flex justify-center items-center w-full h-screen bg-gray-50")],
+    [
+      html.form(
+        [
+          class(
+            "flex flex-col gap-5 p-8 w-80 border rounded-lg shadow-md bg-white",
+          ),
+          type_("submit"),
+        ],
+        [
+          // --- toggle button ---
+          html.div([class("flex bg-gray-100 rounded-md p-1")], [
+            html.button(
+              [
+                case mode {
+                  Login -> active_toggle_button
+                  Register -> inactive_toggle_button
+                },
+                event.on_click(SetPreLoginMode(Login)),
+                type_("button"),
+              ],
+              [html.text("Login")],
+            ),
+            html.button(
+              [
+                case mode {
+                  Register -> active_toggle_button
+                  Login -> inactive_toggle_button
+                },
+                event.on_click(SetPreLoginMode(Register)),
+                type_("button"),
+              ],
+              [html.text("Register")],
+            ),
+          ]),
+
+          // title
+          html.h1([class("text-xl font-bold text-blue-600")], [
+            html.text(case mode {
+              Login -> "Login"
+              Register -> "Create account"
+            }),
+          ]),
+
+          // username
+          html.div([class("flex flex-col gap-1")], [
+            html.label([class("text-sm font-medium text-gray-700")], [
+              html.text("Username"),
+            ]),
+            html.input([
+              class(
+                "border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+              ),
+              type_("text"),
+              attribute.name("username"),
+              placeholder("yourname"),
+            ]),
+          ]),
+
+          // email (register only)
+          case mode {
+            Register ->
+              html.div([class("flex flex-col gap-1")], [
+                html.label([class("text-sm font-medium text-gray-700")], [
+                  html.text("Email"),
+                ]),
+                html.input([
+                  class(
+                    "border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  ),
+                  type_("email"),
+                  name("email"),
+                  placeholder("you@example.com"),
+                ]),
+              ])
+            _ -> html_none()
+          },
+
+          // password
+          html.div([class("flex flex-col gap-1")], [
+            html.label([class("text-sm font-medium text-gray-700")], [
+              html.text("Password"),
+            ]),
+            html.input([
+              class(
+                "border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+              ),
+              type_("password"),
+              name("password"),
+              placeholder("••••••••"),
+            ]),
+          ]),
+
+          // password confirm (register only)
+          case mode {
+            Register ->
+              html.div([class("flex flex-col gap-1")], [
+                html.label([class("text-sm font-medium text-gray-700")], [
+                  html.text("Confirm password"),
+                ]),
+                html.input([
+                  class(
+                    "border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  ),
+                  type_("password"),
+                  name("password_confirm"),
+                  placeholder("••••••••"),
+                ]),
+              ])
+            _ -> html_none()
+          },
+
+          // submit
+          html.button(
+            [
+              class(
+                "mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded",
+              ),
+              type_("submit"),
+            ],
+            [
+              html.text(case mode {
+                Login -> "Log in"
+                Register -> "Create account"
+              }),
+            ],
+          ),
+        ],
+      ),
+    ],
+  )
+}
+
+fn html_none() {
+  html.span([], [])
 }
