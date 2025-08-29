@@ -1,11 +1,13 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import formal/form.{type Form}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/result
 import lustre
 import lustre/attribute.{class, name, placeholder, type_}
 import lustre/effect.{type Effect}
@@ -26,15 +28,30 @@ pub fn main() {
 
 // MODEL -----------------------------------------------------------------------
 
-type Model {
+pub type Model {
   PreLogin(PreLoginState)
   LoggedIn
 }
 
-// TODO: too repetititve - check https://github.com/lustre-labs/lustre/blob/main/examples/02-inputs/04-forms/src/app.gleam 
-type PreLoginState {
+pub type PreLoginState {
   PreLoginState(
     mode: PreLoginMode,
+    login_form: Form(LoginFormData),
+    register_form: Form(RegisterFormData),
+  )
+}
+
+pub type PreLoginMode {
+  Login
+  Register
+}
+
+pub type LoginFormData {
+  LoginFormData(username: String, password: String)
+}
+
+pub type RegisterFormData {
+  RegisterFormData(
     username: String,
     email: String,
     password: String,
@@ -42,73 +59,117 @@ type PreLoginState {
   )
 }
 
-type PreLoginMode {
-  Login
-  Register
-}
-
-fn init(_) -> #(Model, Effect(Msg)) {
+pub fn init(_) -> #(Model, Effect(Msg)) {
   // let effect = fetch_todos(on_response: ApiReturnedTodos)
+
+  let #(login_form, register_form) = get_forms()
 
   #(
     PreLogin(PreLoginState(
       mode: Login,
-      username: "",
-      email: "",
-      password: "",
-      password_confirm: "",
+      login_form: login_form,
+      register_form: register_form,
     )),
     effect.none(),
   )
 }
 
-// UPDATE ----------------------------------------------------------------------
+fn get_forms() -> #(Form(LoginFormData), Form(RegisterFormData)) {
+  #(
+    form.new({
+      use username <- form.field(
+        "username",
+        form.parse_string |> form.check_not_empty,
+      )
 
-type Msg {
-  UserSetPreLoginMode(PreLoginMode)
-  UserChangeUserName(String)
-  UserChangePassword(String)
-  UserChangeEmail(String)
-  UserChangePasswordConfirm(String)
-  UserSubmitPreLogin
+      use password <- form.field(
+        "password",
+        form.parse_string |> form.check_not_empty,
+      )
+
+      form.success(LoginFormData(username:, password:))
+    }),
+    form.new({
+      use username <- form.field(
+        "username",
+        form.parse_string |> form.check_not_empty,
+      )
+
+      use email <- form.field(
+        "email",
+        form.parse_string |> form.check_not_empty,
+      )
+
+      use password <- form.field(
+        "password",
+        form.parse_string |> form.check_not_empty,
+      )
+
+      use password_confirm <- form.field(
+        "password_confirm",
+        form.parse_string |> form.check_not_empty,
+      )
+
+      form.success(RegisterFormData(
+        username:,
+        email:,
+        password:,
+        password_confirm:,
+      ))
+    }),
+  )
 }
 
-fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
-  let model = case msg {
-    UserSetPreLoginMode(mode) ->
-      case model {
-        PreLogin(s) -> PreLogin(PreLoginState(..s, mode: mode))
-        _ -> model
-      }
+// UPDATE ----------------------------------------------------------------------
 
-    UserChangeEmail(updated) ->
-      case model {
-        PreLogin(s) -> PreLogin(PreLoginState(..s, email: updated))
-        _ -> model
-      }
+pub type Msg {
+  UserSetPreLoginMode(PreLoginMode)
+  // submit
+  UserSubmitLogin(Form(LoginFormData))
+  UserSubmitRegister(Form(RegisterFormData))
+  // change
+  UserChangesLogin(Form(LoginFormData))
+  UserChangesRegister(Form(RegisterFormData))
+}
 
-    UserChangePassword(updated) ->
-      case model {
-        PreLogin(s) -> PreLogin(PreLoginState(..s, password: updated))
-        _ -> model
-      }
-
-    UserChangePasswordConfirm(updated) ->
-      case model {
-        PreLogin(s) -> PreLogin(PreLoginState(..s, password_confirm: updated))
-        _ -> model
-      }
-
-    UserChangeUserName(updated) ->
-      case model {
-        PreLogin(s) -> PreLogin(PreLoginState(..s, username: updated))
-        _ -> model
-      }
-
-    UserSubmitPreLogin -> todo
+pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
+  let model = case model {
+    PreLogin(s) ->
+      PreLogin(case msg {
+        UserSetPreLoginMode(mode) -> PreLoginState(..s, mode: mode)
+        UserSubmitLogin(data) -> {
+          case data |> form.run {
+            Error(e) -> PreLoginState(..s, login_form: e)
+            Ok(_) -> todo
+          }
+        }
+        UserSubmitRegister(data) -> {
+          case data |> form.run {
+            Error(e) -> PreLoginState(..s, register_form: e)
+            Ok(_) -> todo
+          }
+        }
+        UserChangesLogin(data) -> {
+          let login_form: Form(LoginFormData) = case data |> form.run {
+            Error(e) -> e
+            Ok(_) -> data
+          }
+          // FIXME: buggy
+          echo form.all_errors(login_form)
+          PreLoginState(..s, login_form: login_form)
+        }
+        UserChangesRegister(data) -> {
+          let register_form: Form(RegisterFormData) = case data |> form.run {
+            Error(e) -> e
+            Ok(_) -> data
+          }
+          // FIXME: buggy
+          echo form.all_errors(register_form)
+          PreLoginState(..s, register_form: register_form)
+        }
+      })
+    _ -> model
   }
-
-  echo model
 
   #(model, effect.none())
 }
@@ -117,11 +178,11 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 fn view(model: Model) -> Element(Msg) {
   case model {
     LoggedIn -> html.div([], [html.text("Welcome!")])
-    PreLogin(state) -> view_login_register(state.mode)
+    PreLogin(state) -> view_login_register(state)
   }
 }
 
-fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
+fn view_login_register(state: PreLoginState) -> Element(Msg) {
   let toggle_button = {
     let active_toggle_button_class =
       class(
@@ -134,7 +195,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
     html.div([class("flex bg-gray-100 rounded-md p-1")], [
       html.button(
         [
-          case mode {
+          case state.mode {
             Login -> active_toggle_button_class
             Register -> inactive_toggle_button_class
           },
@@ -145,7 +206,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
       ),
       html.button(
         [
-          case mode {
+          case state.mode {
             Register -> active_toggle_button_class
             Login -> inactive_toggle_button_class
           },
@@ -159,37 +220,27 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
 
   let title =
     html.h1([class("text-xl font-bold text-blue-600")], [
-      html.text(case mode {
+      html.text(case state.mode {
         Login -> "Login"
         Register -> "Create account"
       }),
     ])
 
-  let fields = case mode {
+  let fields = case state.mode {
     Login -> [
-      html_input("Username", "text", "username", "your_username", fn(x) {
-        UserChangeUserName(x)
-      }),
-      html_input("Password", "password", "password", "••••••••", fn(x) {
-        UserChangePassword(x)
-      }),
+      html_input("Username", "text", "username", "your_username", state),
+      html_input("Password", "password", "password", "••••••••", state),
     ]
     Register -> [
-      html_input("Username", "text", "username", "your_username", fn(x) {
-        UserChangeUserName(x)
-      }),
-      html_input("Email", "email", "email", "you@example.com", fn(x) {
-        UserChangeEmail(x)
-      }),
-      html_input("Password", "password", "password", "••••••••", fn(x) {
-        UserChangePassword(x)
-      }),
+      html_input("Username", "text", "username", "your_username", state),
+      html_input("Email", "email", "email", "you@example.com", state),
+      html_input("Password", "password", "password", "••••••••", state),
       html_input(
         "Confirm password",
         "password",
         "password_confirm",
         "••••••••",
-        fn(x) { UserChangePasswordConfirm(x) },
+        state,
       ),
     ]
   }
@@ -197,18 +248,42 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
   let submit_button =
     html.button(
       [
-        class(
+        attribute.class(
           "mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded",
         ),
-        type_("submit"),
+        attribute.type_("submit"),
+        case state.mode {
+          Login ->
+            state.login_form
+            |> form.run
+            |> result.is_ok
+          Register ->
+            state.register_form
+            |> form.run
+            |> result.is_ok
+        }
+          |> attribute.disabled,
       ],
       [
-        html.text(case mode {
+        html.text(case state.mode {
           Login -> "Log in"
           Register -> "Create account"
         }),
       ],
     )
+
+  let handle_submit = fn(state: PreLoginState, values: List(#(String, String))) {
+    case state.mode {
+      Login ->
+        state.login_form
+        |> form.set_values(values)
+        |> UserSubmitLogin
+      Register ->
+        state.register_form
+        |> form.set_values(values)
+        |> UserSubmitRegister
+    }
+  }
 
   html.div(
     [class("flex justify-center items-center w-full h-screen bg-gray-50")],
@@ -218,8 +293,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
           class(
             "flex flex-col gap-5 p-8 w-80 border rounded-lg shadow-md bg-white",
           ),
-          type_("submit"),
-          event.on_submit(fn(_) { UserSubmitPreLogin }),
+          event.on_submit(fn(values) { handle_submit(state, values) }),
         ],
         list.flatten([
           [toggle_button, title],
@@ -231,13 +305,26 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
   )
 }
 
-fn html_input(
+pub fn html_input(
   label: String,
   type_: String,
   name: String,
   placeholder: String,
-  msg: fn(String) -> msg,
-) -> Element(msg) {
+  state: PreLoginState,
+) -> Element(Msg) {
+  let handle_change = fn(state: PreLoginState, name: String, change: String) {
+    case state.mode {
+      Login ->
+        state.login_form
+        |> form.set_values([#(name, change)])
+        |> UserChangesLogin
+      Register ->
+        state.register_form
+        |> form.set_values([#(name, change)])
+        |> UserChangesRegister
+    }
+  }
+
   html.div([class("flex flex-col gap-1")], [
     html.label([class("text-sm font-medium text-gray-700")], [
       html.text(label),
@@ -249,7 +336,7 @@ fn html_input(
       attribute.type_(type_),
       attribute.name(name),
       attribute.placeholder(placeholder),
-      event.on_input(msg),
+      event.on_change(fn(change) { handle_change(state, name, change) }),
     ]),
   ])
 }
