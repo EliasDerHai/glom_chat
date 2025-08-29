@@ -26,13 +26,13 @@ pub fn main() {
 
 // MODEL -----------------------------------------------------------------------
 
-type Model {
+pub type Model {
   PreLogin(PreLoginState)
   LoggedIn
 }
 
 // TODO: too repetititve - check https://github.com/lustre-labs/lustre/blob/main/examples/02-inputs/04-forms/src/app.gleam 
-type PreLoginState {
+pub type PreLoginState {
   PreLoginState(
     mode: PreLoginMode,
     username: String,
@@ -42,12 +42,12 @@ type PreLoginState {
   )
 }
 
-type PreLoginMode {
+pub type PreLoginMode {
   Login
   Register
 }
 
-fn init(_) -> #(Model, Effect(Msg)) {
+pub fn init(_) -> #(Model, Effect(Msg)) {
   // let effect = fetch_todos(on_response: ApiReturnedTodos)
 
   #(
@@ -64,7 +64,7 @@ fn init(_) -> #(Model, Effect(Msg)) {
 
 // UPDATE ----------------------------------------------------------------------
 
-type Msg {
+pub type Msg {
   UserSetPreLoginMode(PreLoginMode)
   UserChangeUserName(String)
   UserChangePassword(String)
@@ -73,7 +73,7 @@ type Msg {
   UserSubmitPreLogin
 }
 
-fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
+pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   let model = case msg {
     UserSetPreLoginMode(mode) ->
       case model {
@@ -231,7 +231,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
   )
 }
 
-fn html_input(
+pub fn html_input(
   label: String,
   type_: String,
   name: String,
