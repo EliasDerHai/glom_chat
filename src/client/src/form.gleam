@@ -4,6 +4,7 @@ import gleam/option
 import gleam/string
 
 // TYPES -----------------------------------------------------------------------
+// TODO: consider removing
 pub type FormGroup(custom_error) {
   FromGroup(chilren: dict.Dict(String, FromGroupChild(custom_error)))
 }
@@ -59,7 +60,7 @@ type Validator =
 // FUNCTIONS -----------------------------------------------------------------------
 
 /// order of validators matters (first error short-circuits)
-pub fn form_field(validators: List(Validator)) -> FormField(custom_error) {
+pub fn string_form_field(validators: List(Validator)) -> FormField(custom_error) {
   FormField(
     value: StringField(""),
     touch: Pure,
@@ -77,10 +78,11 @@ pub fn set_custom_error(
   FormField(..form_field, custom_error: option.Some(custom_error))
 }
 
+/// unset explicit error 
 pub fn clear_custom_error(
   form_field: FormField(custom_error),
 ) -> FormField(custom_error) {
-  FormField(..form_field, error: option.None)
+  FormField(..form_field, custom_error: option.None)
 }
 
 /// set new value for the form-field (runs valdiators)
@@ -89,6 +91,19 @@ pub fn set_string_value(
   v: String,
 ) -> FormField(custom_error) {
   set_value(field, StringField(v))
+}
+
+/// manual eval of validators (on current value) - eg. for on_blur
+pub fn eval(field: FormField(custom_error)) -> FormField(custom_error) {
+  let error =
+    list.fold(field.validators, option.None, fn(acc, validator) {
+      case acc {
+        option.None -> validator(field.value)
+        some -> some
+      }
+    })
+
+  FormField(..field, touch: Dirty, error: error)
 }
 
 /// set new value for the form-field (runs valdiators)

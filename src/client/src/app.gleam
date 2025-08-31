@@ -8,6 +8,7 @@ import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/option
 import gleam/string
 import lustre
 import lustre/attribute
@@ -37,19 +38,23 @@ pub type Model {
 pub type PreLoginState {
   PreLoginState(
     mode: PreLoginMode,
-    login_form_data: LoginFormData,
-    signup_form_data: SignupFormData,
+    login_form_data: LoginDetails,
+    signup_form_data: SignupDetails,
   )
 }
 
-type DefaultFormField =
-  FormField(Nil)
-
-pub type LoginFormData {
-  LoginFormData(username: DefaultFormField, password: DefaultFormField)
+pub type CustomError {
+  PasswordMissmatch
 }
 
-pub type SignupFormData {
+type DefaultFormField =
+  FormField(CustomError)
+
+pub type LoginDetails {
+  LoginDetails(username: DefaultFormField, password: DefaultFormField)
+}
+
+pub type SignupDetails {
   SignupFormData(
     username: DefaultFormField,
     email: DefaultFormField,
@@ -74,15 +79,15 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   #(
     PreLogin(PreLoginState(
       mode: Login,
-      login_form_data: LoginFormData(
-        username: form.form_field(default_validators),
-        password: form.form_field(default_validators),
+      login_form_data: LoginDetails(
+        username: form.string_form_field(default_validators),
+        password: form.string_form_field(default_validators),
       ),
       signup_form_data: SignupFormData(
-        username: form.form_field(default_validators),
-        email: form.form_field(default_validators),
-        password: form.form_field(default_validators),
-        password_confirm: form.form_field(default_validators),
+        username: form.string_form_field(default_validators),
+        email: form.string_form_field(default_validators),
+        password: form.string_form_field(default_validators),
+        password_confirm: form.string_form_field([form.validator_nonempty()]),
       ),
     )),
     effect.none(),
@@ -95,6 +100,7 @@ pub type Msg {
   UserSetPreLoginMode(PreLoginMode)
   UserSubmitForm
   UserChangeForm(PreLoginFormField, String)
+  UserBlurForm(PreLoginFormField)
 }
 
 pub type PreLoginFormField {
@@ -116,42 +122,48 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   #(model, effect.none())
 }
 
-fn update_pre_login(pre_login_model: PreLoginState, msg: Msg) -> PreLoginState {
+pub fn update_pre_login(
+  pre_login_model: PreLoginState,
+  msg: Msg,
+) -> PreLoginState {
+  let update_login = fn(f: fn(LoginDetails) -> LoginDetails) {
+    PreLoginState(
+      ..pre_login_model,
+      login_form_data: f(pre_login_model.login_form_data),
+    )
+  }
+  let update_signup = fn(f: fn(SignupDetails) -> SignupDetails) {
+    PreLoginState(
+      ..pre_login_model,
+      signup_form_data: f(pre_login_model.signup_form_data),
+    )
+  }
+
   case msg {
     UserSetPreLoginMode(mode) -> PreLoginState(..pre_login_model, mode: mode)
 
     UserChangeForm(field, value) -> {
-      let update_login = fn(f: fn(LoginFormData) -> LoginFormData) {
-        PreLoginState(
-          ..pre_login_model,
-          login_form_data: f(pre_login_model.login_form_data),
-        )
-      }
-      let update_signup = fn(f: fn(SignupFormData) -> SignupFormData) {
-        PreLoginState(
-          ..pre_login_model,
-          signup_form_data: f(pre_login_model.signup_form_data),
-        )
-      }
-
       let value = form.StringField(value)
 
       case field {
         // Login form fields
         LoginUsername ->
           update_login(fn(l) {
-            LoginFormData(..l, username: form.set_value(l.username, value))
+            LoginDetails(..l, username: form.set_value(l.username, value))
           })
         LoginPassword ->
           update_login(fn(l) {
-            LoginFormData(..l, password: form.set_value(l.password, value))
+            LoginDetails(..l, password: form.set_value(l.password, value))
           })
 
         // Signup form fields
-        SignupUsername ->
+        SignupUsername -> {
           update_signup(fn(r) {
-            SignupFormData(..r, username: form.set_value(r.username, value))
+            let field = form.set_value(r.username, value)
+            echo field
+            SignupFormData(..r, username: field)
           })
+        }
         SignupEmail ->
           update_signup(fn(r) {
             SignupFormData(..r, email: form.set_value(r.email, value))
@@ -160,13 +172,51 @@ fn update_pre_login(pre_login_model: PreLoginState, msg: Msg) -> PreLoginState {
           update_signup(fn(r) {
             SignupFormData(..r, password: form.set_value(r.password, value))
           })
-        SignupPasswordConfirm ->
+        SignupPasswordConfirm -> {
           update_signup(fn(r) {
-            SignupFormData(
-              ..r,
-              password_confirm: form.set_value(r.password_confirm, value),
-            )
+            let field = form.set_value(r.password_confirm, value)
+            let field = case r.password.value == r.password_confirm.value {
+              False -> form.set_custom_error(field, PasswordMissmatch)
+              True -> form.clear_custom_error(field)
+            }
+            SignupFormData(..r, password_confirm: field)
           })
+        }
+      }
+    }
+    UserBlurForm(field) -> {
+      case field {
+        // Login form fields
+        LoginUsername ->
+          update_login(fn(l) {
+            LoginDetails(..l, username: form.eval(l.username))
+          })
+        LoginPassword ->
+          update_login(fn(l) {
+            LoginDetails(..l, password: form.eval(l.password))
+          })
+
+        // Signup form fields
+        SignupUsername ->
+          update_signup(fn(r) {
+            SignupFormData(..r, username: form.eval(r.username))
+          })
+        SignupEmail ->
+          update_signup(fn(r) { SignupFormData(..r, email: form.eval(r.email)) })
+        SignupPassword ->
+          update_signup(fn(r) {
+            SignupFormData(..r, password: form.eval(r.password))
+          })
+        SignupPasswordConfirm -> {
+          update_signup(fn(r) {
+            let field = form.eval(r.password_confirm)
+            let field = case r.password.value == r.password_confirm.value {
+              False -> form.set_custom_error(field, PasswordMissmatch)
+              True -> form.clear_custom_error(field)
+            }
+            SignupFormData(..r, password_confirm: field)
+          })
+        }
       }
     }
 
@@ -229,39 +279,75 @@ fn view_login_signup(state: PreLoginState) -> Element(Msg) {
 
   let fields = case mode {
     Login -> [
-      html_input("Username", "text", "username", "your_username", fn(x) {
-        UserChangeForm(LoginUsername, x)
-      }),
-      html_input("Password", "password", "password", "••••••••", fn(x) {
-        UserChangeForm(LoginPassword, x)
-      }),
+      html_input(
+        mode,
+        LoginUsername,
+        "Username",
+        "text",
+        "username",
+        "your_username",
+        state.login_form_data.username |> get_error_text,
+      ),
+      html_input(
+        mode,
+        LoginPassword,
+        "Password",
+        "password",
+        "password",
+        "••••••••",
+        state.login_form_data.password |> get_error_text,
+      ),
     ]
     Signup -> [
-      html_input("Username", "text", "username", "your_username", fn(x) {
-        UserChangeForm(SignupUsername, x)
-      }),
-      html_input("Email", "email", "email", "you@example.com", fn(x) {
-        UserChangeForm(SignupEmail, x)
-      }),
-      html_input("Password", "password", "password", "••••••••", fn(x) {
-        UserChangeForm(SignupPassword, x)
-      }),
       html_input(
+        mode,
+        SignupUsername,
+        "Username",
+        "text",
+        "username",
+        "your_username",
+        state.signup_form_data.username |> get_error_text,
+      ),
+      html_input(
+        mode,
+        SignupEmail,
+        "Email",
+        "email",
+        "email",
+        "you@example.com",
+        state.signup_form_data.email |> get_error_text,
+      ),
+      html_input(
+        mode,
+        SignupPassword,
+        "Password",
+        "password",
+        "password",
+        "••••••••",
+        state.signup_form_data.password |> get_error_text,
+      ),
+      html_input(
+        mode,
+        SignupPasswordConfirm,
         "Confirm password",
         "password",
         "password_confirm",
         "••••••••",
-        fn(x) { UserChangeForm(SignupPasswordConfirm, x) },
+        state.signup_form_data.password_confirm |> get_error_text,
       ),
     ]
   }
 
   let submit_allowed = case mode {
-    Login -> state.login_form_data.username |> form.field_is_valid
-    Signup -> state.signup_form_data.username |> form.field_is_valid
+    Login ->
+      state.login_form_data.username |> form.field_is_valid
+      && state.login_form_data.password |> form.field_is_valid
+    Signup ->
+      state.signup_form_data.username |> form.field_is_valid
+      && state.signup_form_data.email |> form.field_is_valid
+      && state.signup_form_data.password |> form.field_is_valid
+      && state.signup_form_data.password_confirm |> form.field_is_valid
   }
-
-  echo submit_allowed
 
   let submit_button =
     html.button(
@@ -307,25 +393,81 @@ fn view_login_signup(state: PreLoginState) -> Element(Msg) {
   )
 }
 
+pub fn get_error_text(field: FormField(CustomError)) -> option.Option(String) {
+  form.get_error(field)
+  |> option.map(fn(e) {
+    case e {
+      form.Custom(PasswordMissmatch) -> "passwords don't match"
+      form.Predefined(form.Empty) -> "cannot be empty"
+      form.Predefined(form.MinLength(is:, min:)) ->
+        "min length "
+        <> int.to_string(min)
+        <> " (is "
+        <> int.to_string(is)
+        <> ")"
+    }
+  })
+}
+
 pub fn html_input(
+  mode: PreLoginMode,
+  field: PreLoginFormField,
   label: String,
   type_: String,
   name: String,
   placeholder: String,
-  msg: fn(String) -> msg,
-) -> Element(msg) {
-  html.div([attribute.class("flex flex-col gap-1")], [
-    html.label([attribute.class("text-sm font-medium text-gray-700")], [
-      html.text(label),
-    ]),
-    html.input([
-      attribute.class(
-        "border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+  error: option.Option(String),
+) -> Element(Msg) {
+  let key =
+    case mode {
+      Login -> "login_"
+      Signup -> "signup_"
+    }
+    <> name
+
+  let error_element = case error {
+    option.None -> []
+    option.Some(error_text) -> [
+      html.p([attribute.class("mt-1 text-sm text-red-600")], [
+        html.text(error_text),
+      ]),
+    ]
+  }
+
+  let input_classes = case error {
+    option.Some(_) ->
+      "border rounded px-3 py-2 focus:outline-none focus:ring-2 
+         border-red-500 focus:ring-red-500 focus:border-red-500 
+         placeholder-red-400"
+    option.None ->
+      "border border-gray-300 rounded px-3 py-2 focus:outline-none 
+         focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  }
+
+  echo #(key, error)
+
+  keyed.div([], [
+    #(
+      key,
+      html.label(
+        [
+          attribute.class(
+            "flex flex-col gap-1 text-sm font-medium text-gray-700",
+          ),
+        ],
+        [
+          html.text(label),
+          html.input([
+            attribute.class(input_classes),
+            attribute.type_(type_),
+            attribute.name(name),
+            attribute.placeholder(placeholder),
+            event.on_change(fn(value: String) { UserChangeForm(field, value) }),
+            event.on_blur(UserBlurForm(field)),
+          ]),
+          ..error_element
+        ],
       ),
-      attribute.type_(type_),
-      attribute.name(name),
-      attribute.placeholder(placeholder),
-      event.on_input(msg),
-    ]),
+    ),
   ])
 }
