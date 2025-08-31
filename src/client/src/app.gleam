@@ -1,11 +1,14 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import form.{type FormField}
+import gleam/bool
 import gleam/dynamic/decode.{type Decoder}
 import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/string
 import lustre
 import lustre/attribute
 import lustre/effect.{type Effect}
@@ -35,40 +38,51 @@ pub type PreLoginState {
   PreLoginState(
     mode: PreLoginMode,
     login_form_data: LoginFormData,
-    register_form_data: RegisterFormData,
+    signup_form_data: SignupFormData,
   )
 }
 
+type DefaultFormField =
+  FormField(String, Nil)
+
 pub type LoginFormData {
-  LoginFormData(username: String, password: String)
+  LoginFormData(username: DefaultFormField, password: DefaultFormField)
 }
 
-pub type RegisterFormData {
-  RegisterFormData(
-    username: String,
-    email: String,
-    password: String,
-    password_confirm: String,
+pub type SignupFormData {
+  SignupFormData(
+    username: DefaultFormField,
+    email: DefaultFormField,
+    password: DefaultFormField,
+    password_confirm: DefaultFormField,
   )
 }
 
 pub type PreLoginMode {
   Login
-  Register
+  Signup
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
   // let effect = fetch_todos(on_response: ApiReturnedTodos)
 
+  let default_validators = [
+    form.validator_nonempty(),
+    form.validator_min_length(5),
+  ]
+
   #(
     PreLogin(PreLoginState(
       mode: Login,
-      login_form_data: LoginFormData(username: "", password: ""),
-      register_form_data: RegisterFormData(
-        username: "",
-        email: "",
-        password: "",
-        password_confirm: "",
+      login_form_data: LoginFormData(
+        username: form.form_field(default_validators),
+        password: form.form_field(default_validators),
+      ),
+      signup_form_data: SignupFormData(
+        username: form.form_field(default_validators),
+        email: form.form_field(default_validators),
+        password: form.form_field(default_validators),
+        password_confirm: form.form_field(default_validators),
       ),
     )),
     effect.none(),
@@ -86,10 +100,10 @@ pub type Msg {
 pub type PreLoginFormField {
   LoginUsername
   LoginPassword
-  RegisterUsername
-  RegisterEmail
-  RegisterPassword
-  RegisterPasswordConfirm
+  SignupUsername
+  SignupEmail
+  SignupPassword
+  SignupPasswordConfirm
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -113,30 +127,43 @@ fn update_pre_login(pre_login_model: PreLoginState, msg: Msg) -> PreLoginState {
           login_form_data: f(pre_login_model.login_form_data),
         )
       }
-      let update_register = fn(f: fn(RegisterFormData) -> RegisterFormData) {
+      let update_signup = fn(f: fn(SignupFormData) -> SignupFormData) {
         PreLoginState(
           ..pre_login_model,
-          register_form_data: f(pre_login_model.register_form_data),
+          signup_form_data: f(pre_login_model.signup_form_data),
         )
       }
 
       case field {
         // Login form fields
         LoginUsername ->
-          update_login(fn(l) { LoginFormData(..l, username: value) })
+          update_login(fn(l) {
+            LoginFormData(..l, username: form.set_value(l.username, value))
+          })
         LoginPassword ->
-          update_login(fn(l) { LoginFormData(..l, password: value) })
+          update_login(fn(l) {
+            LoginFormData(..l, password: form.set_value(l.password, value))
+          })
 
-        // Register form fields
-        RegisterUsername ->
-          update_register(fn(r) { RegisterFormData(..r, username: value) })
-        RegisterEmail ->
-          update_register(fn(r) { RegisterFormData(..r, email: value) })
-        RegisterPassword ->
-          update_register(fn(r) { RegisterFormData(..r, password: value) })
-        RegisterPasswordConfirm ->
-          update_register(fn(r) {
-            RegisterFormData(..r, password_confirm: value)
+        // Signup form fields
+        SignupUsername ->
+          update_signup(fn(r) {
+            SignupFormData(..r, username: form.set_value(r.username, value))
+          })
+        SignupEmail ->
+          update_signup(fn(r) {
+            SignupFormData(..r, email: form.set_value(r.email, value))
+          })
+        SignupPassword ->
+          update_signup(fn(r) {
+            SignupFormData(..r, password: form.set_value(r.password, value))
+          })
+        SignupPasswordConfirm ->
+          update_signup(fn(r) {
+            SignupFormData(
+              ..r,
+              password_confirm: form.set_value(r.password_confirm, value),
+            )
           })
       }
     }
@@ -149,11 +176,12 @@ fn update_pre_login(pre_login_model: PreLoginState, msg: Msg) -> PreLoginState {
 fn view(model: Model) -> Element(Msg) {
   case model {
     LoggedIn -> html.div([], [html.text("Welcome!")])
-    PreLogin(state) -> view_login_register(state.mode)
+    PreLogin(state) -> view_login_signup(state)
   }
 }
 
-fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
+fn view_login_signup(state: PreLoginState) -> Element(Msg) {
+  let mode = state.mode
   let toggle_button = {
     let active_toggle_button_class =
       attribute.class(
@@ -168,7 +196,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
         [
           case mode {
             Login -> active_toggle_button_class
-            Register -> inactive_toggle_button_class
+            Signup -> inactive_toggle_button_class
           },
           event.on_click(UserSetPreLoginMode(Login)),
           attribute.type_("button"),
@@ -178,13 +206,13 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
       html.button(
         [
           case mode {
-            Register -> active_toggle_button_class
+            Signup -> active_toggle_button_class
             Login -> inactive_toggle_button_class
           },
-          event.on_click(UserSetPreLoginMode(Register)),
+          event.on_click(UserSetPreLoginMode(Signup)),
           attribute.type_("button"),
         ],
-        [html.text("Register")],
+        [html.text("Signup")],
       ),
     ])
   }
@@ -193,7 +221,7 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
     html.h1([attribute.class("text-xl font-bold text-blue-600")], [
       html.text(case mode {
         Login -> "Login"
-        Register -> "Create account"
+        Signup -> "Create account"
       }),
     ])
 
@@ -206,38 +234,48 @@ fn view_login_register(mode: PreLoginMode) -> Element(Msg) {
         UserChangeForm(LoginPassword, x)
       }),
     ]
-    Register -> [
+    Signup -> [
       html_input("Username", "text", "username", "your_username", fn(x) {
-        UserChangeForm(RegisterUsername, x)
+        UserChangeForm(SignupUsername, x)
       }),
       html_input("Email", "email", "email", "you@example.com", fn(x) {
-        UserChangeForm(RegisterEmail, x)
+        UserChangeForm(SignupEmail, x)
       }),
       html_input("Password", "password", "password", "••••••••", fn(x) {
-        UserChangeForm(RegisterPassword, x)
+        UserChangeForm(SignupPassword, x)
       }),
       html_input(
         "Confirm password",
         "password",
         "password_confirm",
         "••••••••",
-        fn(x) { UserChangeForm(RegisterPasswordConfirm, x) },
+        fn(x) { UserChangeForm(SignupPasswordConfirm, x) },
       ),
     ]
   }
+
+  let submit_allowed = case mode {
+    Login -> state.login_form_data.username |> form.is_valid
+    Signup -> state.signup_form_data.username |> form.is_valid
+  }
+
+  echo submit_allowed
 
   let submit_button =
     html.button(
       [
         attribute.class(
-          "mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded",
+          "mt-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded transition-colors "
+          <> "disabled:bg-gray-300 "
+          <> "hover:bg-blue-700 ",
         ),
         attribute.type_("submit"),
+        attribute.disabled(submit_allowed |> bool.negate),
       ],
       [
         html.text(case mode {
           Login -> "Log in"
-          Register -> "Create account"
+          Signup -> "Create account"
         }),
       ],
     )
