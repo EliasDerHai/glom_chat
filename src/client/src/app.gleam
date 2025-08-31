@@ -43,7 +43,7 @@ pub type PreLoginState {
 }
 
 type DefaultFormField =
-  FormField(String, Nil)
+  FormField(Nil)
 
 pub type LoginFormData {
   LoginFormData(username: DefaultFormField, password: DefaultFormField)
@@ -133,6 +133,8 @@ fn update_pre_login(pre_login_model: PreLoginState, msg: Msg) -> PreLoginState {
           signup_form_data: f(pre_login_model.signup_form_data),
         )
       }
+
+      let value = form.StringField(value)
 
       case field {
         // Login form fields
@@ -255,8 +257,8 @@ fn view_login_signup(state: PreLoginState) -> Element(Msg) {
   }
 
   let submit_allowed = case mode {
-    Login -> state.login_form_data.username |> form.is_valid
-    Signup -> state.signup_form_data.username |> form.is_valid
+    Login -> state.login_form_data.username |> form.field_is_valid
+    Signup -> state.signup_form_data.username |> form.field_is_valid
   }
 
   echo submit_allowed
