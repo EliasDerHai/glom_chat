@@ -82,6 +82,28 @@ pub type PreLoginFormProperty {
   SignupPasswordConfirm
 }
 
+pub fn evaluate_matching_passwords(model: SignupDetails) -> SignupDetails {
+  let #(password_field, password_confirm_field) = case
+    model.password.value != model.password_confirm.value
+    && model.password.touch == form.Dirty
+    && model.password_confirm.touch == form.Dirty
+  {
+    True -> #(
+      form.set_custom_error(model.password, PasswordMissmatch),
+      form.set_custom_error(model.password_confirm, PasswordMissmatch),
+    )
+    False -> #(
+      form.clear_custom_error(model.password),
+      form.clear_custom_error(model.password_confirm),
+    )
+  }
+  SignupFormData(
+    ..model,
+    password: password_field,
+    password_confirm: password_confirm_field,
+  )
+}
+
 pub fn update(
   model: PreLoginState,
   msg: PreLoginMsg,
@@ -125,15 +147,15 @@ pub fn update(
         SignupPassword ->
           update_signup(fn(r) {
             SignupFormData(..r, password: form.set_value(r.password, value))
+            |> evaluate_matching_passwords
           })
         SignupPasswordConfirm -> {
           update_signup(fn(r) {
-            let field = form.set_value(r.password_confirm, value)
-            let field = case r.password.value == r.password_confirm.value {
-              False -> form.set_custom_error(field, PasswordMissmatch)
-              True -> form.clear_custom_error(field)
-            }
-            SignupFormData(..r, password_confirm: field)
+            SignupFormData(
+              ..r,
+              password_confirm: form.set_value(r.password_confirm, value),
+            )
+            |> evaluate_matching_passwords
           })
         }
       }
@@ -160,15 +182,12 @@ pub fn update(
         SignupPassword ->
           update_signup(fn(r) {
             SignupFormData(..r, password: form.eval(r.password))
+            |> evaluate_matching_passwords
           })
         SignupPasswordConfirm -> {
           update_signup(fn(r) {
-            let field = form.eval(r.password_confirm)
-            let field = case r.password.value == r.password_confirm.value {
-              False -> form.set_custom_error(field, PasswordMissmatch)
-              True -> form.clear_custom_error(field)
-            }
-            SignupFormData(..r, password_confirm: field)
+            SignupFormData(..r, password_confirm: form.eval(r.password_confirm))
+            |> evaluate_matching_passwords
           })
         }
       }
