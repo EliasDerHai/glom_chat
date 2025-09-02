@@ -49,6 +49,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 }
 
 // VIEW ------------------------------------------------------------------------
+
 fn view(model: Model) -> Element(Msg) {
   case model {
     LoggedIn -> html.div([], [html.text("Welcome!")])
