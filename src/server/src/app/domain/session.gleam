@@ -4,6 +4,7 @@ import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic
 import gleam/dynamic/decode
+import gleam/float
 import gleam/http.{Post}
 import gleam/io
 import gleam/json
@@ -50,15 +51,31 @@ pub fn from_get_session_by_user_id_row(
 }
 
 // ################################################################################
+// DTOs
+// ################################################################################
+
+type UserLoginDto {
+  UserLoginDto(username: String, password: String)
+}
+
+fn decode_user_login() -> decode.Decoder(UserLoginDto) {
+  use username <- decode.field("username", decode.string)
+  use password <- decode.field("password", decode.string)
+  decode.success(UserLoginDto(username:, password:))
+}
+
+// ################################################################################
 // Session Management
 // ################################################################################
 
-pub fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
+const day_in_seconds = 86_400
+
+fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
   let session_id = uuid.v7()
   let expires_at =
     timestamp.system_time()
-    |> timestamp.add(duration.seconds(24 * 60 * 60))
-  // 24 hours
+    |> timestamp.add(duration.seconds(day_in_seconds))
+
   let csrf_secret =
     crypto.strong_random_bytes(32) |> bit_array.base64_url_encode(True)
 
@@ -73,7 +90,7 @@ pub fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
   Ok(SessionEntity(session_id, user_id, expires_at, csrf_secret))
 }
 
-pub fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
+fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
   use query_result <- result.try(
     db
     |> pool.conn()
@@ -90,7 +107,7 @@ pub fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
   Ok(from_get_session_row(row))
 }
 
-pub fn get_session_by_user_id(
+fn get_session_by_user_id(
   db: DbPool,
   user_id: Uuid,
 ) -> Result(Option(SessionEntity), Nil) {
@@ -105,7 +122,7 @@ pub fn get_session_by_user_id(
   |> result.map_error(fn(_) { Nil })
 }
 
-pub fn delete_session(db: DbPool, session_id: Uuid) -> Result(Nil, Nil) {
+fn delete_session(db: DbPool, session_id: Uuid) -> Result(Nil, Nil) {
   db
   |> pool.conn()
   |> sql.delete_session(session_id)
@@ -113,7 +130,7 @@ pub fn delete_session(db: DbPool, session_id: Uuid) -> Result(Nil, Nil) {
   |> result.map_error(fn(_) { Nil })
 }
 
-pub fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
+fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
   db
   |> pool.conn()
   |> sql.cleanup_expired_sessions()
@@ -125,13 +142,12 @@ pub fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
 // CSRF Protection
 // ################################################################################
 
-pub fn generate_csrf_token(session: SessionEntity) -> BitArray {
+fn generate_csrf_token(session: SessionEntity) -> BitArray {
   let payload = uuid.to_string(session.id) <> ":" <> session.csrf_secret
   crypto.hash(crypto.Sha256, <<payload:utf8>>)
-  // |> bit_array.base64_url_encode(False)
 }
 
-pub fn verify_csrf_token(session: SessionEntity, token: String) -> Bool {
+fn verify_csrf_token(session: SessionEntity, token: String) -> Bool {
   let expected_token = generate_csrf_token(session)
 
   case bit_array.base64_url_decode(token) {
@@ -141,24 +157,8 @@ pub fn verify_csrf_token(session: SessionEntity, token: String) -> Bool {
 }
 
 // ################################################################################
-// DTOs
-// ################################################################################
-
-pub type UserLoginDto {
-  UserLoginDto(username: String, password: String)
-}
-
-fn decode_user_login() -> decode.Decoder(UserLoginDto) {
-  use username <- decode.field("username", decode.string)
-  use password <- decode.field("password", decode.string)
-  decode.success(UserLoginDto(username:, password:))
-}
-
-// ################################################################################
 // Endpoints
 // ################################################################################
-
-const day_in_seconds = 86_400
 
 pub fn login(req: Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, Post)
@@ -265,4 +265,59 @@ fn verify_user_credentials_and_create_session(
   )
 
   Ok(#(session, user_id))
+}
+
+pub fn me(req: Request, db: DbPool) -> Response {
+  use <- wisp.require_method(req, http.Get)
+
+  case get_authenticated_user(req, db) {
+    Ok(#(session, user_id)) -> {
+      wisp.ok()
+      |> wisp.json_body(
+        json.object([
+          #("authenticated", json.bool(True)),
+          #("user_id", uuid.to_string(user_id) |> json.string()),
+          #("session_id", uuid.to_string(session.id) |> json.string()),
+          #(
+            "expires_at",
+            float.round(timestamp.to_unix_seconds(session.expires_at) *. 1000.0)
+              |> json.int(),
+          ),
+        ])
+        |> json.to_string_tree,
+      )
+    }
+    Error(response) -> response
+  }
+}
+
+fn get_authenticated_user(
+  req: Request,
+  db: DbPool,
+) -> Result(#(SessionEntity, Uuid), Response) {
+  use session_id_str <- result.try(
+    wisp.get_cookie(req, "session_id", wisp.Signed)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session_id cookie")
+      wisp.response(401)
+    }),
+  )
+
+  use session_id <- result.try(
+    uuid.from_string(session_id_str)
+    |> result.map_error(fn(_) {
+      io.println("Failed to parse session_id UUID")
+      wisp.response(401)
+    }),
+  )
+
+  use session <- result.try(
+    get_session(db, session_id)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session from database")
+      wisp.response(401)
+    }),
+  )
+
+  Ok(#(session, session.user_id))
 }

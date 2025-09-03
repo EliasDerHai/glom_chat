@@ -2,6 +2,7 @@ import app/http_router
 import app/persist/migration
 import app/persist/pool
 import app/websocket
+import environment
 import gleam/erlang/process
 import gleam/http/request
 import gleam/io
@@ -13,13 +14,18 @@ import wisp/wisp_mist
 pub fn main() {
   wisp.configure_logger()
 
+  // load .env
+  environment.load_dot_env()
+  let secret_key = environment.get_secret()
+
+  // db migration and pool setup
   migration.migrate_db()
   let #(_supervisor, db) = pool.new_supervisor_with_pool()
 
   let assert Ok(_) =
     fn(req) {
       case request.path_segments(req) {
-        // ws upgrade to WebSocket
+        // /ws upgrade to WebSocket
         ["ws"] ->
           mist.websocket(
             request: req,
@@ -29,10 +35,9 @@ pub fn main() {
           )
 
         _ ->
-          wisp_mist.handler(
-            http_router.handle_request_with_db(db),
-            wisp.random_string(64),
-          )(req)
+          wisp_mist.handler(http_router.handle_request_with_db(db), secret_key)(
+            req,
+          )
       }
     }
     |> mist.new

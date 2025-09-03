@@ -12,17 +12,21 @@ fn handle_request(req: Request, db: DbPool) -> Response {
   use req <- middleware(req)
 
   case wisp.path_segments(req) {
-    // `/`.
-    [] -> hello(req)
+    // `/`
+    [] -> simple_string_response(req, "hello")
+    // `/ping`
+    ["ping"] -> simple_string_response(req, "pong")
 
-    // `/auth/login`.
+    // `/auth/login`
     ["auth", "login"] -> session.login(req, db)
-    // `/auth/logout`.
+    // `/auth/logout`
     ["auth", "logout"] -> session.logout(req, db)
+    // `/auth/me`
+    ["auth", "me"] -> session.me(req, db)
 
-    // `/users/:id`.
+    // `/users/:id`
     ["users", id] -> user.user(req, db, id)
-    // `/users`.
+    // `/users`
     ["users"] -> user.users(req, db)
 
     _ -> wisp.not_found()
@@ -46,15 +50,11 @@ fn middleware(
   // Rewrite HEAD requests to GET requests and return an empty body.
   use req <- wisp.handle_head(req)
 
-  // Known-header based CSRF protection for non-HEAD/GET requests
-  // use req <- wisp.csrf_known_header_protection(req)
-
   handle_request(req)
 }
 
-fn hello(req: Request) -> Response {
+fn simple_string_response(req: Request, response: String) -> Response {
   use <- wisp.require_method(req, Get)
 
-  wisp.ok()
-  |> wisp.string_body("hello")
+  wisp.string_body(wisp.ok(), response)
 }
