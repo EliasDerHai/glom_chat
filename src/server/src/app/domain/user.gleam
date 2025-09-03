@@ -15,24 +15,24 @@ import youid/uuid.{type Uuid}
 // ################################################################################
 
 pub type UserEntity {
-  UserEntity(id: Uuid, user_name: String, email: String, email_verified: Bool)
+  UserEntity(id: Uuid, username: String, email: String, email_verified: Bool)
 }
 
 pub fn to_json(user: UserEntity) -> json.Json {
   json.object([
     #("id", uuid.to_string(user.id) |> json.string()),
-    #("user_name", json.string(user.user_name)),
+    #("username", json.string(user.username)),
     #("email", json.string(user.email)),
     #("email_verified", json.bool(user.email_verified)),
   ])
 }
 
 pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
-  UserEntity(el.id, el.user_name, el.email, el.email_verified)
+  UserEntity(el.id, el.username, el.email, el.email_verified)
 }
 
 pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
-  UserEntity(el.id, el.user_name, el.email, el.email_verified)
+  UserEntity(el.id, el.username, el.email, el.email_verified)
 }
 
 // ################################################################################
@@ -40,23 +40,23 @@ pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
 // ################################################################################
 
 /// {
-///   "user_name": "John",
+///   "username": "John",
 ///   "email": "john.boy@gleam.com"
 /// }
 pub type CreateUserDto {
-  CreateUserDto(user_name: String, email: String, password: String)
+  CreateUserDto(username: String, email: String, password: String)
 }
 
 fn decode_user() -> decode.Decoder(CreateUserDto) {
-  use user_name <- decode.field("user_name", decode.string)
+  use username <- decode.field("username", decode.string)
   use email <- decode.field("email", decode.string)
   use password <- decode.field("password", decode.string)
-  decode.success(CreateUserDto(user_name:, email:, password:))
+  decode.success(CreateUserDto(username:, email:, password:))
 }
 
 /// {
-///   "user_name": "John",
-///   "email": "john.boy@gleam.com"
+///   "username": "John",
+///   "password": "s7490$@2xx03"
 /// }
 pub type UserLoginDto {
   UserLoginDto(username: String, password: String)
@@ -92,7 +92,7 @@ fn list_users(db: DbPool) -> Response {
       list.map(r.rows, from_select_users_row)
       |> json.array(fn(el) { el |> to_json })
       |> json.to_string_tree
-      |> wisp.json_response(201)
+      |> wisp.json_response(200)
     }
   }
 }
@@ -110,11 +110,11 @@ fn create_user(req: Request, db: DbPool) -> Response {
 
     use _ <- result.try(
       conn
-      |> sql.create_user(user_id, dto.user_name, dto.email, False, dto.password)
+      |> sql.create_user(user_id, dto.username, dto.email, False, dto.password)
       |> result.map_error(fn(_) { Nil }),
     )
 
-    Ok(UserEntity(user_id, dto.user_name, dto.email, False))
+    Ok(UserEntity(user_id, dto.username, dto.email, False))
   }
 
   case result {

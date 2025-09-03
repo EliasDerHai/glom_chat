@@ -19,7 +19,7 @@ pub fn user_to_json_test() {
   let expecation =
     json.object([
       #("id", uuid.to_string(id) |> json.string()),
-      #("user_name", json.string("John")),
+      #("username", json.string("John")),
       #("email", json.string("john.boy@gleamer.com")),
       #("email_verified", json.bool(False)),
     ])

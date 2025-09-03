@@ -19,7 +19,7 @@ import youid/uuid.{type Uuid}
 pub fn create_user(db, arg_1, arg_2, arg_3, arg_4, arg_5) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
-  "INSERT INTO users (id, user_name, email, email_verified, password_hash)
+  "INSERT INTO users (id, username, email, email_verified, password_hash)
 VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
 "
   |> pog.query
@@ -58,7 +58,7 @@ pub fn delete_user(db, arg_1) {
 pub type SelectUserRow {
   SelectUserRow(
     id: Uuid,
-    user_name: String,
+    username: String,
     email: String,
     email_verified: Bool,
     last_login: Option(Timestamp),
@@ -75,14 +75,14 @@ pub type SelectUserRow {
 pub fn select_user(db, arg_1) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
-    use user_name <- decode.field(1, decode.string)
+    use username <- decode.field(1, decode.string)
     use email <- decode.field(2, decode.string)
     use email_verified <- decode.field(3, decode.bool)
     use last_login <- decode.field(4, decode.optional(pog.timestamp_decoder()))
     use failed_logins <- decode.field(5, decode.int)
     decode.success(SelectUserRow(
       id:,
-      user_name:,
+      username:,
       email:,
       email_verified:,
       last_login:,
@@ -90,7 +90,7 @@ pub fn select_user(db, arg_1) {
     ))
   }
 
-  "SELECT id, user_name, email, email_verified, last_login, failed_logins FROM users WHERE id = $1;
+  "SELECT id, username, email, email_verified, last_login, failed_logins FROM users WHERE id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
@@ -107,7 +107,7 @@ pub fn select_user(db, arg_1) {
 pub type SelectUsersRow {
   SelectUsersRow(
     id: Uuid,
-    user_name: String,
+    username: String,
     email: String,
     email_verified: Bool,
     last_login: Option(Timestamp),
@@ -124,14 +124,14 @@ pub type SelectUsersRow {
 pub fn select_users(db, arg_1, arg_2) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
-    use user_name <- decode.field(1, decode.string)
+    use username <- decode.field(1, decode.string)
     use email <- decode.field(2, decode.string)
     use email_verified <- decode.field(3, decode.bool)
     use last_login <- decode.field(4, decode.optional(pog.timestamp_decoder()))
     use failed_logins <- decode.field(5, decode.int)
     decode.success(SelectUsersRow(
       id:,
-      user_name:,
+      username:,
       email:,
       email_verified:,
       last_login:,
@@ -139,7 +139,7 @@ pub fn select_users(db, arg_1, arg_2) {
     ))
   }
 
-  "SELECT id, user_name, email, email_verified, last_login, failed_logins FROM users ORDER BY ID LIMIT $1 OFFSET $2;
+  "SELECT id, username, email, email_verified, last_login, failed_logins FROM users ORDER BY ID LIMIT $1 OFFSET $2;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
@@ -172,7 +172,7 @@ pub fn verify_user_credentials(db, arg_1, arg_2) {
 
   "SELECT id
 FROM users
-WHERE user_name = $1
+WHERE username = $1
   AND password_hash = crypt($2, password_hash);
 "
   |> pog.query
