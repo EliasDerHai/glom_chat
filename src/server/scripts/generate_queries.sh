@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# working dir independent
+cd "$(git rev-parse --show-toplevel)"
+cd src/server
+
 if [[ "$(uname)" == "Darwin" ]]; then
   # macOS
   HOST_IP="localhost"
