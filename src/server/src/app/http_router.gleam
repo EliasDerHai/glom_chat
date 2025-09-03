@@ -2,6 +2,8 @@ import app/domain/session
 import app/domain/user
 import app/persist/pool.{type DbPool}
 import gleam/http.{Get}
+import gleam/order
+import gleam/time/timestamp
 import wisp.{type Request, type Response}
 
 pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
@@ -12,21 +14,24 @@ fn handle_request(req: Request, db: DbPool) -> Response {
   use req <- middleware(req)
 
   case wisp.path_segments(req) {
-    // `/`
+    // `/`.
     [] -> simple_string_response(req, "hello")
-    // `/ping`
+    // `/ping`.
     ["ping"] -> simple_string_response(req, "pong")
 
-    // `/auth/login`
+    // `/auth/login`.
     ["auth", "login"] -> session.login(req, db)
-    // `/auth/logout`
+    // `/auth/logout`.
     ["auth", "logout"] -> session.logout(req, db)
-    // `/auth/me`
+    // `/auth/me` - protected endpoint to test authentication.
     ["auth", "me"] -> session.me(req, db)
 
-    // `/users/:id`
-    ["users", id] -> user.user(req, db, id)
-    // `/users`
+    // `/users/:id`.
+    ["users", id] -> {
+      use req <- validation_middleware(req, db)
+      user.user(req, db, id)
+    }
+    // `/users`.
     ["users"] -> user.users(req, db)
 
     _ -> wisp.not_found()
@@ -51,6 +56,28 @@ fn middleware(
   use req <- wisp.handle_head(req)
 
   handle_request(req)
+}
+
+fn validation_middleware(
+  req: wisp.Request,
+  db: DbPool,
+  handle_request: fn(wisp.Request) -> wisp.Response,
+) -> wisp.Response {
+  case session.get_session_from_cookie(req, db) {
+    Error(r) -> r
+    Ok(session_entity) -> {
+      case
+        timestamp.compare(session_entity.expires_at, timestamp.system_time())
+      {
+        order.Lt -> wisp.response(401)
+        order.Gt | order.Eq -> {
+          // TODO: check & rotate CSRF token on non GET
+
+          handle_request(req)
+        }
+      }
+    }
+  }
 }
 
 fn simple_string_response(req: Request, response: String) -> Response {

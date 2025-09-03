@@ -1,8 +1,8 @@
+import app/environment
 import app/http_router
 import app/persist/migration
 import app/persist/pool
 import app/websocket
-import environment
 import gleam/erlang/process
 import gleam/http/request
 import gleam/io

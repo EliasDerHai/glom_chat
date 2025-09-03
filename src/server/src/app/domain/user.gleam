@@ -1,3 +1,4 @@
+import app/domain/entity.{type UserEntity, UserEntity}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/dynamic/decode
@@ -12,10 +13,6 @@ import youid/uuid.{type Uuid}
 // ################################################################################
 // Entity
 // ################################################################################
-
-pub type UserEntity {
-  UserEntity(id: Uuid, username: String, email: String, email_verified: Bool)
-}
 
 pub fn to_json(user: UserEntity) -> json.Json {
   json.object([

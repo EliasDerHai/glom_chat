@@ -1,3 +1,4 @@
+import app/domain/entity
 import app/domain/user
 import gleam/json
 import gleeunit
@@ -10,7 +11,7 @@ pub fn main() -> Nil {
 pub fn user_to_json_test() {
   // arrange 
   let id = uuid.v7()
-  let input = user.UserEntity(id, "John", "john.boy@gleamer.com", False)
+  let input = entity.UserEntity(id, "John", "john.boy@gleamer.com", False)
 
   // act
   let actual = input |> user.to_json()

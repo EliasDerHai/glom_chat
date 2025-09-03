@@ -1,3 +1,5 @@
+import app/auth
+import app/domain/entity.{type SessionEntity, SessionEntity}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -20,15 +22,6 @@ import youid/uuid.{type Uuid}
 // ################################################################################
 // Entity
 // ################################################################################
-
-pub type SessionEntity {
-  SessionEntity(
-    id: Uuid,
-    user_id: Uuid,
-    expires_at: timestamp.Timestamp,
-    csrf_secret: String,
-  )
-}
 
 pub fn from_get_session_row(row: sql.GetSessionByIdRow) -> SessionEntity {
   SessionEntity(
@@ -139,24 +132,6 @@ fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
 }
 
 // ################################################################################
-// CSRF Protection
-// ################################################################################
-
-fn generate_csrf_token(session: SessionEntity) -> BitArray {
-  let payload = uuid.to_string(session.id) <> ":" <> session.csrf_secret
-  crypto.hash(crypto.Sha256, <<payload:utf8>>)
-}
-
-fn verify_csrf_token(session: SessionEntity, token: String) -> Bool {
-  let expected_token = generate_csrf_token(session)
-
-  case bit_array.base64_url_decode(token) {
-    Error(_) -> False
-    Ok(token) -> crypto.secure_compare(token, expected_token)
-  }
-}
-
-// ################################################################################
 // Endpoints
 // ################################################################################
 
@@ -165,9 +140,9 @@ pub fn login(req: Request, db: DbPool) -> Response {
   use json <- wisp.require_json(req)
 
   case verify_user_credentials_and_create_session(db, json) {
-    Ok(#(session, user_id)) -> {
+    Ok(session) -> {
       let csrf_token =
-        generate_csrf_token(session) |> bit_array.base64_url_encode(False)
+        auth.generate_csrf_token(session) |> bit_array.base64_url_encode(False)
 
       wisp.ok()
       |> wisp.set_cookie(
@@ -185,13 +160,6 @@ pub fn login(req: Request, db: DbPool) -> Response {
         day_in_seconds,
       )
       |> wisp.set_header("content-type", "application/json")
-      |> wisp.json_body(
-        json.object([
-          #("user_id", uuid.to_string(user_id) |> json.string()),
-          #("csrf_token", json.string(csrf_token)),
-        ])
-        |> json.to_string_tree,
-      )
     }
     Error(response) -> response
   }
@@ -220,10 +188,41 @@ pub fn logout(req: Request, db: DbPool) -> Response {
 // Helper Functions
 // ################################################################################
 
+pub fn get_session_from_cookie(
+  req: Request,
+  db: DbPool,
+) -> Result(SessionEntity, Response) {
+  use session_id_str <- result.try(
+    wisp.get_cookie(req, "session_id", wisp.Signed)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session_id cookie")
+      wisp.response(401)
+    }),
+  )
+
+  use session_id <- result.try(
+    uuid.from_string(session_id_str)
+    |> result.map_error(fn(_) {
+      io.println("Failed to parse session_id UUID")
+      wisp.response(401)
+    }),
+  )
+
+  use session <- result.try(
+    get_session(db, session_id)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session from database")
+      wisp.response(401)
+    }),
+  )
+
+  Ok(session)
+}
+
 fn verify_user_credentials_and_create_session(
   db: DbPool,
   json: dynamic.Dynamic,
-) -> Result(#(SessionEntity, Uuid), Response) {
+) -> Result(SessionEntity, Response) {
   use dto <- result.try(
     decode.run(json, decode_user_login())
     |> result.map_error(fn(_) { wisp.bad_request() }),
@@ -264,19 +263,19 @@ fn verify_user_credentials_and_create_session(
     |> result.map_error(fn(_) { wisp.internal_server_error() }),
   )
 
-  Ok(#(session, user_id))
+  Ok(session)
 }
 
 pub fn me(req: Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, http.Get)
 
-  case get_authenticated_user(req, db) {
-    Ok(#(session, user_id)) -> {
+  case get_session_from_cookie(req, db) {
+    Ok(session) -> {
       wisp.ok()
       |> wisp.json_body(
         json.object([
           #("authenticated", json.bool(True)),
-          #("user_id", uuid.to_string(user_id) |> json.string()),
+          #("user_id", uuid.to_string(session.user_id) |> json.string()),
           #("session_id", uuid.to_string(session.id) |> json.string()),
           #(
             "expires_at",
@@ -289,35 +288,4 @@ pub fn me(req: Request, db: DbPool) -> Response {
     }
     Error(response) -> response
   }
-}
-
-fn get_authenticated_user(
-  req: Request,
-  db: DbPool,
-) -> Result(#(SessionEntity, Uuid), Response) {
-  use session_id_str <- result.try(
-    wisp.get_cookie(req, "session_id", wisp.Signed)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie")
-      wisp.response(401)
-    }),
-  )
-
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID")
-      wisp.response(401)
-    }),
-  )
-
-  use session <- result.try(
-    get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(#(session, session.user_id))
 }
