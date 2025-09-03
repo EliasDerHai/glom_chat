@@ -1,3 +1,4 @@
+import app/domain/session
 import app/domain/user
 import app/persist/pool.{type DbPool}
 import gleam/http.{Get}
@@ -11,16 +12,16 @@ fn handle_request(req: Request, db: DbPool) -> Response {
   use req <- middleware(req)
 
   case wisp.path_segments(req) {
-    // This matches `/`.
+    // `/`.
     [] -> hello(req)
 
-    // `/auth`.
-    ["users", "auth"] -> user.auth(req, db)
+    // `/auth/login`.
+    ["auth", "login"] -> session.login(req, db)
+    // `/auth/logout`.
+    ["auth", "logout"] -> session.logout(req, db)
 
     // `/users/:id`.
-    // The `id` segment is bound to a variable and passed to the handler.
     ["users", id] -> user.user(req, db, id)
-
     // `/users`.
     ["users"] -> user.users(req, db)
 
