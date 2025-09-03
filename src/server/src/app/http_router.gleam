@@ -14,12 +14,15 @@ fn handle_request(req: Request, db: DbPool) -> Response {
     // This matches `/`.
     [] -> hello(req)
 
-    // This matches `/users`.
-    ["users"] -> user.users(req, db)
+    // `/auth`.
+    ["users", "auth"] -> user.auth(req, db)
 
-    // This matches `/users/:id`.
+    // `/users/:id`.
     // The `id` segment is bound to a variable and passed to the handler.
     ["users", id] -> user.user(req, db, id)
+
+    // `/users`.
+    ["users"] -> user.users(req, db)
 
     _ -> wisp.not_found()
   }

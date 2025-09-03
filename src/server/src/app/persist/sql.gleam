@@ -5,6 +5,8 @@
 ////
 
 import gleam/dynamic/decode
+import gleam/option.{type Option}
+import gleam/time/timestamp.{type Timestamp}
 import pog
 import youid/uuid.{type Uuid}
 
@@ -14,17 +16,18 @@ import youid/uuid.{type Uuid}
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn create_user(db, arg_1, arg_2, arg_3, arg_4) {
+pub fn create_user(db, arg_1, arg_2, arg_3, arg_4, arg_5) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
-  "INSERT INTO users (id, user_name, email, email_verified)
-VALUES ($1, $2, $3, $4);
+  "INSERT INTO users (id, user_name, email, email_verified, password_hash)
+VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
 "
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
   |> pog.parameter(pog.text(arg_2))
   |> pog.parameter(pog.text(arg_3))
   |> pog.parameter(pog.bool(arg_4))
+  |> pog.parameter(pog.text(arg_5))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -58,6 +61,8 @@ pub type SelectUserRow {
     user_name: String,
     email: String,
     email_verified: Bool,
+    last_login: Option(Timestamp),
+    failed_logins: Int,
   )
 }
 
@@ -73,10 +78,19 @@ pub fn select_user(db, arg_1) {
     use user_name <- decode.field(1, decode.string)
     use email <- decode.field(2, decode.string)
     use email_verified <- decode.field(3, decode.bool)
-    decode.success(SelectUserRow(id:, user_name:, email:, email_verified:))
+    use last_login <- decode.field(4, decode.optional(pog.timestamp_decoder()))
+    use failed_logins <- decode.field(5, decode.int)
+    decode.success(SelectUserRow(
+      id:,
+      user_name:,
+      email:,
+      email_verified:,
+      last_login:,
+      failed_logins:,
+    ))
   }
 
-  "SELECT * FROM users WHERE id = $1;
+  "SELECT id, user_name, email, email_verified, last_login, failed_logins FROM users WHERE id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
@@ -96,6 +110,8 @@ pub type SelectUsersRow {
     user_name: String,
     email: String,
     email_verified: Bool,
+    last_login: Option(Timestamp),
+    failed_logins: Int,
   )
 }
 
@@ -105,18 +121,63 @@ pub type SelectUsersRow {
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn select_users(db) {
+pub fn select_users(db, arg_1, arg_2) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
     use user_name <- decode.field(1, decode.string)
     use email <- decode.field(2, decode.string)
     use email_verified <- decode.field(3, decode.bool)
-    decode.success(SelectUsersRow(id:, user_name:, email:, email_verified:))
+    use last_login <- decode.field(4, decode.optional(pog.timestamp_decoder()))
+    use failed_logins <- decode.field(5, decode.int)
+    decode.success(SelectUsersRow(
+      id:,
+      user_name:,
+      email:,
+      email_verified:,
+      last_login:,
+      failed_logins:,
+    ))
   }
 
-  "SELECT * FROM users;
+  "SELECT id, user_name, email, email_verified, last_login, failed_logins FROM users ORDER BY ID LIMIT $1 OFFSET $2;
 "
   |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `verify_user_credentials` query
+/// defined in `./src/app/persist/sql/verify_user_credentials.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.2.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type VerifyUserCredentialsRow {
+  VerifyUserCredentialsRow(id: Uuid)
+}
+
+/// Runs the `verify_user_credentials` query
+/// defined in `./src/app/persist/sql/verify_user_credentials.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn verify_user_credentials(db, arg_1, arg_2) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    decode.success(VerifyUserCredentialsRow(id:))
+  }
+
+  "SELECT id
+FROM users
+WHERE user_name = $1
+  AND password_hash = crypt($2, password_hash);
+"
+  |> pog.query
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.parameter(pog.text(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }

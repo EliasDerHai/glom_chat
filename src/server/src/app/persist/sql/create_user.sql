@@ -1,2 +1,2 @@
-INSERT INTO users (id, user_name, email, email_verified)
-VALUES ($1, $2, $3, $4);
+INSERT INTO users (id, user_name, email, email_verified, password_hash)
+VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));

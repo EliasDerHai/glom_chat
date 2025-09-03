@@ -1,5 +1,6 @@
 import app/persist/pool.{type DbPool}
 import app/persist/sql
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get, Post}
 import gleam/json
@@ -43,13 +44,28 @@ pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
 ///   "email": "john.boy@gleam.com"
 /// }
 pub type CreateUserDto {
-  CreateUserDto(user_name: String, email: String)
+  CreateUserDto(user_name: String, email: String, password: String)
 }
 
 fn decode_user() -> decode.Decoder(CreateUserDto) {
   use user_name <- decode.field("user_name", decode.string)
   use email <- decode.field("email", decode.string)
-  decode.success(CreateUserDto(user_name:, email:))
+  use password <- decode.field("password", decode.string)
+  decode.success(CreateUserDto(user_name:, email:, password:))
+}
+
+/// {
+///   "user_name": "John",
+///   "email": "john.boy@gleam.com"
+/// }
+pub type UserLoginDto {
+  UserLoginDto(username: String, password: String)
+}
+
+fn decode_user_login() -> decode.Decoder(UserLoginDto) {
+  use username <- decode.field("username", decode.string)
+  use password <- decode.field("password", decode.string)
+  decode.success(UserLoginDto(username:, password:))
 }
 
 // ################################################################################
@@ -69,7 +85,7 @@ fn list_users(db: DbPool) -> Response {
   case
     db
     |> pool.conn()
-    |> sql.select_users()
+    |> sql.select_users(100, 0)
   {
     Error(_) -> wisp.internal_server_error()
     Ok(r) -> {
@@ -89,12 +105,12 @@ fn create_user(req: Request, db: DbPool) -> Response {
     let conn = pog.named_connection(db.name)
 
     use dto <- result.try(
-      decode_user() |> decode.run(json, _) |> result.map_error(fn(_) { Nil }),
+      decode.run(json, decode_user()) |> result.map_error(fn(_) { Nil }),
     )
 
     use _ <- result.try(
       conn
-      |> sql.create_user(user_id, dto.user_name, dto.email, False)
+      |> sql.create_user(user_id, dto.user_name, dto.email, False, dto.password)
       |> result.map_error(fn(_) { Nil }),
     )
 
@@ -127,6 +143,44 @@ pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
   |> result.unwrap_both
 }
 
+/// `/users/auth` endpoint
+pub fn auth(req: Request, db: DbPool) -> Response {
+  use <- wisp.require_method(req, Post)
+  use json <- wisp.require_json(req)
+
+  verify_user_credentials(db, json) |> result.unwrap_both
+}
+
+fn verify_user_credentials(
+  db: DbPool,
+  json: dynamic.Dynamic,
+) -> Result(Response, Response) {
+  use dto <- result.try(
+    decode.run(json, decode_user_login())
+    |> result.map_error(fn(_) { wisp.bad_request() }),
+  )
+
+  use query_result <- result.try(
+    db
+    |> pool.conn()
+    |> sql.verify_user_credentials(dto.username, dto.password)
+    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+  )
+
+  use sql.VerifyUserCredentialsRow(user_id) <- result.try(
+    query_result.rows
+    |> list.first
+    |> result.map_error(fn(_) { wisp.not_found() }),
+  )
+
+  user_id
+  |> uuid.to_string
+  |> json.string
+  |> json.to_string_tree
+  |> wisp.json_response(201)
+  |> Ok
+}
+
 fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
   use query_result <- result.try(
     db
@@ -135,13 +189,13 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
     |> result.map_error(fn(_) { wisp.internal_server_error() }),
   )
 
-  use entity <- result.try(
+  use row <- result.try(
     query_result.rows
     |> list.first
     |> result.map_error(fn(_) { wisp.not_found() }),
   )
 
-  entity
+  row
   |> from_select_user_row
   |> to_json
   |> json.to_string_tree

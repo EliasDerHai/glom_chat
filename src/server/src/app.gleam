@@ -1,38 +1,19 @@
 import app/http_router
+import app/persist/migration
 import app/persist/pool
 import app/websocket
-import cigogne
-import cigogne/types.{type MigrateError}
 import gleam/erlang/process
 import gleam/http/request
 import gleam/io
 import gleam/option
-import gleam/result
 import mist
 import wisp
 import wisp/wisp_mist
 
-fn migrate_db() -> Result(Nil, MigrateError) {
-  let config = cigogne.default_config
-
-  use engine <- result.try(cigogne.create_engine(config))
-  cigogne.apply_to_last(engine)
-}
-
 pub fn main() {
   wisp.configure_logger()
 
-  // migrate
-  case migrate_db() {
-    Ok(_) -> io.println("migration finished")
-    Error(types.NoMigrationToApplyError) -> io.println("nothing to migrate")
-    Error(other) -> {
-      echo other
-      panic as "failed to migrate"
-    }
-  }
-
-  // database connection pool supervisor
+  migration.migrate_db()
   let #(_supervisor, db) = pool.new_supervisor_with_pool()
 
   let assert Ok(_) =
