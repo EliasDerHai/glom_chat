@@ -1,9 +1,8 @@
 import app/domain/session
 import app/domain/user
+import app/middleware
 import app/persist/pool.{type DbPool}
-import gleam/http.{Get}
-import gleam/order
-import gleam/time/timestamp
+import gleam/http.{Get, Post}
 import wisp.{type Request, type Response}
 
 pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
@@ -11,72 +10,37 @@ pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
 }
 
 fn handle_request(req: Request, db: DbPool) -> Response {
-  use req <- middleware(req)
+  use req <- middleware.default_middleware(req)
 
   case wisp.path_segments(req) {
-    // `/`.
+    // Public endpoints - no validation needed
     [] -> simple_string_response(req, "hello")
-    // `/ping`.
     ["ping"] -> simple_string_response(req, "pong")
-
-    // `/auth/login`.
     ["auth", "login"] -> session.login(req, db)
-    // `/auth/logout`.
-    ["auth", "logout"] -> session.logout(req, db)
-    // `/auth/me` - protected endpoint to test authentication.
-    ["auth", "me"] -> session.me(req, db)
+    ["users"] ->
+      case req.method {
+        // Signup - no validation
+        Post -> user.create_user(req, db)
+        Get -> {
+          use _ <- middleware.validation_middleware(req, db)
+          user.list_users(db)
+        }
+        _ -> wisp.method_not_allowed([Get, Post])
+      }
 
-    // `/users/:id`.
-    ["users", id] -> {
-      use req <- validation_middleware(req, db)
-      user.user(req, db, id)
-    }
-    // `/users`.
-    ["users"] -> user.users(req, db)
-
-    _ -> wisp.not_found()
+    _ -> validate_and_handle_requests(req, db)
   }
 }
 
-fn middleware(
-  req: wisp.Request,
-  handle_request: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
-  // Permit browsers to simulate methods other than GET and POST using the
-  // `_method` query parameter.
-  let req = wisp.method_override(req)
+// Protected endpoints - require validation
+fn validate_and_handle_requests(req, db) {
+  use req <- middleware.validation_middleware(req, db)
+  case wisp.path_segments(req) {
+    ["auth", "logout"] -> session.logout(req, db)
+    ["auth", "me"] -> session.me(req, db)
+    ["users", id] -> user.user(req, db, id)
 
-  // Log information about the request and response.
-  use <- wisp.log_request(req)
-
-  // Return a default 500 response if the request handler crashes.
-  use <- wisp.rescue_crashes
-
-  // Rewrite HEAD requests to GET requests and return an empty body.
-  use req <- wisp.handle_head(req)
-
-  handle_request(req)
-}
-
-fn validation_middleware(
-  req: wisp.Request,
-  db: DbPool,
-  handle_request: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
-  case session.get_session_from_cookie(req, db) {
-    Error(r) -> r
-    Ok(session_entity) -> {
-      case
-        timestamp.compare(session_entity.expires_at, timestamp.system_time())
-      {
-        order.Lt -> wisp.response(401)
-        order.Gt | order.Eq -> {
-          // TODO: check & rotate CSRF token on non GET
-
-          handle_request(req)
-        }
-      }
-    }
+    _ -> wisp.not_found()
   }
 }
 

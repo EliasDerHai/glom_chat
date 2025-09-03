@@ -2,7 +2,7 @@ import app/domain/entity.{type UserEntity, UserEntity}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/dynamic/decode
-import gleam/http.{Delete, Get, Post}
+import gleam/http.{Delete, Get}
 import gleam/json
 import gleam/list
 import gleam/result
@@ -54,16 +54,8 @@ fn decode_user() -> decode.Decoder(CreateUserDto) {
 // Endpoint-handler
 // ################################################################################
 
-/// `/users` endpoint
-pub fn users(req: Request, db: DbPool) -> Response {
-  case req.method {
-    Get -> list_users(db)
-    Post -> create_user(req, db)
-    _ -> wisp.method_not_allowed([Get, Post])
-  }
-}
-
-fn list_users(db: DbPool) -> Response {
+/// GET `/users` endpoint
+pub fn list_users(db: DbPool) -> Response {
   case
     db
     |> pool.conn()
@@ -79,7 +71,8 @@ fn list_users(db: DbPool) -> Response {
   }
 }
 
-fn create_user(req: Request, db: DbPool) -> Response {
+/// POST `/users` endpoint
+pub fn create_user(req: Request, db: DbPool) -> Response {
   use json <- wisp.require_json(req)
 
   let result = {

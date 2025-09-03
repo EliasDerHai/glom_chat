@@ -139,6 +139,10 @@ pub fn login(req: Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, Post)
   use json <- wisp.require_json(req)
 
+  // check and cleanup expired on every login 
+  // circumvents CRON or other routine for now
+  let _ = cleanup_expired_sessions(db)
+
   case verify_user_credentials_and_create_session(db, json) {
     Ok(session) -> {
       let csrf_token =
