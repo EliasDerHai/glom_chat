@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [src/client, src/server]
+        app: [src/client, src/server, src/shared]
 
     # Run all commands from each app's root (where gleam.toml lives)
     defaults:

@@ -16,6 +16,7 @@ import lustre/element/html
 import lustre/element/keyed
 import lustre/event
 import rsvp
+import user
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {
@@ -254,39 +255,20 @@ fn send_signup_req(
 ) -> Effect(msg) {
   let url = endpoints.users()
   let handler = rsvp.expect_json(decode_signup_response(), handle_response)
-  // {
-  // 	"username": "Tom",
-  // 	"email": "tom@gleam.com",
-  //    "password": "123456"
-  // }
-  let body =
-    json.object([
-      #(
-        "username",
-        json.string(
-          signup_details.username.value |> form.get_form_field_value_as_string,
-        ),
-      ),
-      #(
-        "email",
-        json.string(
-          signup_details.email.value |> form.get_form_field_value_as_string,
-        ),
-      ),
-      #(
-        "password",
-        json.string(
-          signup_details.password.value |> form.get_form_field_value_as_string,
-        ),
-      ),
-    ])
+
+  let create =
+    user.CreateUserDto(
+      signup_details.username.value |> form.get_form_field_value_as_string,
+      signup_details.email.value |> form.get_form_field_value_as_string,
+      signup_details.password.value |> form.get_form_field_value_as_string,
+    )
 
   case request.to(url) {
     Ok(request) ->
       request
       |> request.set_method(http.Post)
       |> request.set_header("content-type", "application/json")
-      |> request.set_body(json.to_string(body))
+      |> request.set_body(json.to_string(create |> user.create_user_dto_to_json))
       |> rsvp.send(handler)
 
     Error(_) -> panic as { "Failed to create request to " <> url }

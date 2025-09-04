@@ -1,5 +1,4 @@
 import app/auth
-import app/domain/entity.{type SessionEntity, SessionEntity}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -16,12 +15,24 @@ import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
 import pog
+import session.{type SessionEntity, SessionEntity}
+import user
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
 // ################################################################################
 // Entity
 // ################################################################################
+
+// NOTE: session doesn't have to live in /shared package since it's a server only concept. only the session_id ever gets sent to client but as session_cookie not as json
+pub type SessionEntity {
+  SessionEntity(
+    id: Uuid,
+    user_id: Uuid,
+    expires_at: timestamp.Timestamp,
+    csrf_secret: String,
+  )
+}
 
 pub fn from_get_session_row(row: sql.GetSessionByIdRow) -> SessionEntity {
   SessionEntity(
@@ -41,20 +52,6 @@ pub fn from_get_session_by_user_id_row(
     expires_at: row.expires_at,
     csrf_secret: row.csrf_secret,
   )
-}
-
-// ################################################################################
-// DTOs
-// ################################################################################
-
-type UserLoginDto {
-  UserLoginDto(username: String, password: String)
-}
-
-fn decode_user_login() -> decode.Decoder(UserLoginDto) {
-  use username <- decode.field("username", decode.string)
-  use password <- decode.field("password", decode.string)
-  decode.success(UserLoginDto(username:, password:))
 }
 
 // ################################################################################
@@ -228,7 +225,7 @@ fn verify_user_credentials_and_create_session(
   json: dynamic.Dynamic,
 ) -> Result(SessionEntity, Response) {
   use dto <- result.try(
-    decode.run(json, decode_user_login())
+    decode.run(json, user.decode_user_login())
     |> result.map_error(fn(_) { wisp.bad_request() }),
   )
 

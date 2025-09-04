@@ -1,4 +1,3 @@
-import app/domain/entity.{type UserEntity, UserEntity}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/dynamic/decode
@@ -7,6 +6,7 @@ import gleam/json
 import gleam/list
 import gleam/result
 import pog
+import user.{type UserEntity, UserEntity}
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -14,40 +14,12 @@ import youid/uuid.{type Uuid}
 // Entity
 // ################################################################################
 
-pub fn to_json(user: UserEntity) -> json.Json {
-  json.object([
-    #("id", uuid.to_string(user.id) |> json.string()),
-    #("username", json.string(user.username)),
-    #("email", json.string(user.email)),
-    #("email_verified", json.bool(user.email_verified)),
-  ])
-}
-
 pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
   UserEntity(el.id, el.username, el.email, el.email_verified)
 }
 
 pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
   UserEntity(el.id, el.username, el.email, el.email_verified)
-}
-
-// ################################################################################
-// Dto
-// ################################################################################
-
-/// {
-///   "username": "John",
-///   "email": "john.boy@gleam.com"
-/// }
-pub type CreateUserDto {
-  CreateUserDto(username: String, email: String, password: String)
-}
-
-fn decode_user() -> decode.Decoder(CreateUserDto) {
-  use username <- decode.field("username", decode.string)
-  use email <- decode.field("email", decode.string)
-  use password <- decode.field("password", decode.string)
-  decode.success(CreateUserDto(username:, email:, password:))
 }
 
 // ################################################################################
@@ -64,7 +36,7 @@ pub fn list_users(db: DbPool) -> Response {
     Error(_) -> wisp.internal_server_error()
     Ok(r) -> {
       list.map(r.rows, from_select_users_row)
-      |> json.array(fn(el) { el |> to_json })
+      |> json.array(fn(el) { el |> user.to_json })
       |> json.to_string_tree
       |> wisp.json_response(200)
     }
@@ -80,7 +52,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
     let conn = pog.named_connection(db.name)
 
     use dto <- result.try(
-      decode.run(json, decode_user()) |> result.map_error(fn(_) { Nil }),
+      decode.run(json, user.decode_user()) |> result.map_error(fn(_) { Nil }),
     )
 
     use _ <- result.try(
@@ -95,7 +67,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
   case result {
     Error(_) -> wisp.bad_request()
     Ok(entity) ->
-      to_json(entity) |> json.to_string_tree |> wisp.json_response(201)
+      user.to_json(entity) |> json.to_string_tree |> wisp.json_response(201)
   }
 }
 
@@ -134,7 +106,7 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
 
   row
   |> from_select_user_row
-  |> to_json
+  |> user.to_json
   |> json.to_string_tree
   |> wisp.json_response(201)
   |> Ok

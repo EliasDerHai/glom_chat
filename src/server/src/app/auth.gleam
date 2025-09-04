@@ -1,6 +1,6 @@
-import app/domain/entity.{type SessionEntity}
 import gleam/bit_array
 import gleam/crypto
+import session.{type SessionEntity}
 import youid/uuid
 
 // ################################################################################
