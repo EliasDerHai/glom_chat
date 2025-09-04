@@ -6,4 +6,4 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 cd src/client
 
-gleam run -m lustre/dev start
+gleam run -m lustre/dev start --proxy-from="/api" --proxy-to="http://localhost:8000"

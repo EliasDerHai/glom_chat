@@ -23,8 +23,6 @@ pub type Model {
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
-  // let effect = fetch_todos(on_response: ApiReturnedTodos)
-
   #(PreLogin(pre_login.init()), effect.none())
 }
 

@@ -1,6 +1,12 @@
+import endpoints
 import form.{type FormField}
 import gleam/bool
+import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
+import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option
 import lustre/attribute
@@ -9,6 +15,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/element/keyed
 import lustre/event
+import rsvp
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {
@@ -66,11 +73,21 @@ pub fn init() {
 }
 
 // UPDATE -----------------------------------------------------------------------
+pub type SignupResponse {
+  SignupResponse(
+    id: String,
+    username: String,
+    email: String,
+    email_verified: Bool,
+  )
+}
+
 pub type PreLoginMsg {
   UserSetPreLoginMode(PreLoginMode)
   UserSubmitForm
   UserChangeForm(PreLoginFormProperty, String)
   UserBlurForm(PreLoginFormProperty)
+  ApiRespondSignupRequest(Result(SignupResponse, rsvp.Error))
 }
 
 pub type PreLoginFormProperty {
@@ -116,6 +133,8 @@ pub fn update(
   }
 
   let model = case msg {
+    // FIXME: after switching mode (== toggle login/signup) 
+    // UI state is out of sync with model
     UserSetPreLoginMode(mode) -> PreLoginState(..model, mode: mode)
 
     UserChangeForm(field, value) -> {
@@ -193,10 +212,100 @@ pub fn update(
       }
     }
 
-    UserSubmitForm -> todo
+    ApiRespondSignupRequest(result) -> {
+      case result {
+        Ok(signup_response) -> {
+          io.println("Signup successful for user: " <> signup_response.username)
+          PreLoginState(..model, mode: Login)
+        }
+        Error(error) -> {
+          io.println("Signup failed")
+          echo error
+          model
+        }
+      }
+    }
+
+    UserSubmitForm -> model
   }
 
-  #(model, effect.none())
+  let effect = case msg {
+    UserSubmitForm -> {
+      case model.mode {
+        Signup -> {
+          send_signup_req(model.signup_form_data, ApiRespondSignupRequest)
+        }
+        Login -> {
+          // TODO: Implement login request
+          io.println("Login functionality not yet implemented")
+          effect.none()
+        }
+      }
+    }
+    _ -> effect.none()
+  }
+
+  #(model, effect)
+}
+
+fn send_signup_req(
+  signup_details: SignupDetails,
+  on_response handle_response: fn(Result(SignupResponse, rsvp.Error)) -> msg,
+) -> Effect(msg) {
+  let url = endpoints.users()
+  let handler = rsvp.expect_json(decode_signup_response(), handle_response)
+  // {
+  // 	"username": "Tom",
+  // 	"email": "tom@gleam.com",
+  //    "password": "123456"
+  // }
+  let body =
+    json.object([
+      #(
+        "username",
+        json.string(
+          signup_details.username.value |> form.get_form_field_value_as_string,
+        ),
+      ),
+      #(
+        "email",
+        json.string(
+          signup_details.email.value |> form.get_form_field_value_as_string,
+        ),
+      ),
+      #(
+        "password",
+        json.string(
+          signup_details.password.value |> form.get_form_field_value_as_string,
+        ),
+      ),
+    ])
+
+  case request.to(url) {
+    Ok(request) ->
+      request
+      |> request.set_method(http.Post)
+      |> request.set_header("content-type", "application/json")
+      |> request.set_body(json.to_string(body))
+      |> rsvp.send(handler)
+
+    Error(_) -> panic as { "Failed to create request to " <> url }
+  }
+}
+
+/// expected server response:
+/// {
+///   "id": "0199163d-e168-753a-abb9-c09aab0123cd",
+///   "username": "Tom",
+///   "email": "tom@gleam.com",
+///   "email_verified": false
+/// }
+fn decode_signup_response() -> decode.Decoder(SignupResponse) {
+  use id <- decode.field("id", decode.string)
+  use username <- decode.field("username", decode.string)
+  use email <- decode.field("email", decode.string)
+  use email_verified <- decode.field("email_verified", decode.bool)
+  decode.success(SignupResponse(id, username, email, email_verified))
 }
 
 // VIEW -----------------------------------------------------------------------

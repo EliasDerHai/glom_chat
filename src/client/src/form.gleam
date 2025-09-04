@@ -36,6 +36,12 @@ pub type FormFieldValue {
   // TODO: others
 }
 
+pub fn get_form_field_value_as_string(field_value: FormFieldValue) -> String {
+  case field_value {
+    StringField(v) -> v
+  }
+}
+
 pub type FormFieldError(custom_error) {
   Predefined(PredefinedFormFieldError)
   Custom(custom_error)
