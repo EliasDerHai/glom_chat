@@ -6,13 +6,26 @@ import gleam/json
 import gleam/list
 import gleam/result
 import pog
-import user.{type UserEntity, UserEntity}
+import shared_user
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
 // ################################################################################
 // Entity
 // ################################################################################
+
+pub type UserEntity {
+  UserEntity(id: Uuid, username: String, email: String, email_verified: Bool)
+}
+
+pub fn to_dto(u: UserEntity) -> shared_user.UserDto {
+  shared_user.UserDto(
+    uuid.to_string(u.id),
+    u.username,
+    u.email,
+    u.email_verified,
+  )
+}
 
 pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
   UserEntity(el.id, el.username, el.email, el.email_verified)
@@ -36,7 +49,7 @@ pub fn list_users(db: DbPool) -> Response {
     Error(_) -> wisp.internal_server_error()
     Ok(r) -> {
       list.map(r.rows, from_select_users_row)
-      |> json.array(fn(el) { el |> user.to_json })
+      |> json.array(fn(el) { el |> to_dto |> shared_user.to_json })
       |> json.to_string_tree
       |> wisp.json_response(200)
     }
@@ -52,7 +65,8 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
     let conn = pog.named_connection(db.name)
 
     use dto <- result.try(
-      decode.run(json, user.decode_user()) |> result.map_error(fn(_) { Nil }),
+      decode.run(json, shared_user.decode_create_user_dto())
+      |> result.map_error(fn(_) { Nil }),
     )
 
     use _ <- result.try(
@@ -67,7 +81,11 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
   case result {
     Error(_) -> wisp.bad_request()
     Ok(entity) ->
-      user.to_json(entity) |> json.to_string_tree |> wisp.json_response(201)
+      entity
+      |> to_dto
+      |> shared_user.to_json
+      |> json.to_string_tree
+      |> wisp.json_response(201)
   }
 }
 
@@ -106,7 +124,8 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
 
   row
   |> from_select_user_row
-  |> user.to_json
+  |> to_dto
+  |> shared_user.to_json
   |> json.to_string_tree
   |> wisp.json_response(201)
   |> Ok

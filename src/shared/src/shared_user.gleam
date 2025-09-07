@@ -1,23 +1,18 @@
 import gleam/dynamic/decode
 import gleam/json
-import youid/uuid.{type Uuid}
 
 // ENTITY 
 
-pub type UserEntity {
-  UserEntity(id: Uuid, username: String, email: String, email_verified: Bool)
+pub type UserDto {
+  UserDto(id: String, username: String, email: String, email_verified: Bool)
 }
 
-fn decode_signup_response() -> decode.Decoder(UserEntity) {
+pub fn decode_user_dto() -> decode.Decoder(UserDto) {
   use id <- decode.field("id", decode.string)
   use username <- decode.field("username", decode.string)
   use email <- decode.field("email", decode.string)
   use email_verified <- decode.field("email_verified", decode.bool)
-
-  case id |> uuid.from_string {
-    Error(_) -> todo
-    Ok(id) -> decode.success(UserEntity(id, username, email, email_verified))
-  }
+  decode.success(UserDto(id, username, email, email_verified))
 }
 
 /// {
@@ -26,9 +21,9 @@ fn decode_signup_response() -> decode.Decoder(UserEntity) {
 ///   "email": "tom@gleam.com",
 ///   "email_verified": false
 /// }
-pub fn to_json(user: UserEntity) -> json.Json {
+pub fn to_json(user: UserDto) -> json.Json {
   json.object([
-    #("id", uuid.to_string(user.id) |> json.string()),
+    #("id", json.string(user.id)),
     #("username", json.string(user.username)),
     #("email", json.string(user.email)),
     #("email_verified", json.bool(user.email_verified)),

@@ -1,27 +1,39 @@
 import gleam/json
 import gleeunit
-import user.{UserEntity}
-import youid/uuid
+import shared_user.{UserDto}
 
 pub fn main() -> Nil {
   gleeunit.main()
 }
 
-pub fn user_to_json_test() {
+pub fn user_json_roundtrip_test() {
   // arrange 
-  let id = uuid.v7()
-  let input = UserEntity(id, "John", "john.boy@gleamer.com", False)
+  let input =
+    UserDto(
+      "9c5b94b1-35ad-49bb-b118-8e8fc24abf80",
+      "John",
+      "john.boy@gleamer.com",
+      False,
+    )
 
-  // act
-  let actual = input |> user.to_json()
+  // act serialize
+  let actual = input |> shared_user.to_json()
 
-  // assert
-  let expecation =
+  // assert serialize
+  let expectation =
     json.object([
-      #("id", uuid.to_string(id) |> json.string()),
+      #("id", json.string("9c5b94b1-35ad-49bb-b118-8e8fc24abf80")),
       #("username", json.string("John")),
       #("email", json.string("john.boy@gleamer.com")),
       #("email_verified", json.bool(False)),
     ])
-  assert expecation == actual
+  assert expectation == actual
+
+  // act deserialize
+  let json_text = json.to_string(actual)
+  let assert Ok(actual) =
+    json.parse(from: json_text, using: shared_user.decode_user_dto())
+
+  // assert deserialize
+  assert input == actual
 }

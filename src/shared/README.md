@@ -1,24 +1,7 @@
 # shared
 
-[![Package Version](https://img.shields.io/hexpm/v/shared)](https://hex.pm/packages/shared)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/shared/)
+shared between 
+ - [server](../server/)
+ - [client](../client/)
 
-```sh
-gleam add shared@1
-```
-```gleam
-import shared
-
-pub fn main() -> Nil {
-  // TODO: An example of the project in use
-}
-```
-
-Further documentation can be found at <https://hexdocs.pm/shared>.
-
-## Development
-
-```sh
-gleam run   # Run the project
-gleam test  # Run the tests
-```
+domain files are prefixed with "shared_" to avoid namespace collision and to keep overview.

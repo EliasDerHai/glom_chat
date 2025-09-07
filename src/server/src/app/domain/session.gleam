@@ -1,4 +1,3 @@
-import app/auth
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -15,8 +14,7 @@ import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
 import pog
-import session.{type SessionEntity, SessionEntity}
-import user
+import shared_user
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -132,7 +130,11 @@ fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
 // Endpoints
 // ################################################################################
 
-pub fn login(req: Request, db: DbPool) -> Response {
+pub fn login(
+  req: Request,
+  db: DbPool,
+  csrf_token_builder: fn(SessionEntity) -> BitArray,
+) -> Response {
   use <- wisp.require_method(req, Post)
   use json <- wisp.require_json(req)
 
@@ -143,7 +145,7 @@ pub fn login(req: Request, db: DbPool) -> Response {
   case verify_user_credentials_and_create_session(db, json) {
     Ok(session) -> {
       let csrf_token =
-        auth.generate_csrf_token(session) |> bit_array.base64_url_encode(False)
+        csrf_token_builder(session) |> bit_array.base64_url_encode(False)
 
       wisp.ok()
       |> wisp.set_cookie(
@@ -225,7 +227,7 @@ fn verify_user_credentials_and_create_session(
   json: dynamic.Dynamic,
 ) -> Result(SessionEntity, Response) {
   use dto <- result.try(
-    decode.run(json, user.decode_user_login())
+    decode.run(json, shared_user.decode_user_login_dto())
     |> result.map_error(fn(_) { wisp.bad_request() }),
   )
 

@@ -1,3 +1,4 @@
+import app/auth
 import app/domain/session
 import app/domain/user
 import app/middleware
@@ -16,7 +17,7 @@ fn handle_request(req: Request, db: DbPool) -> Response {
     // Public endpoints - no validation needed
     [] -> simple_string_response(req, "hello")
     ["ping"] -> simple_string_response(req, "pong")
-    ["auth", "login"] -> session.login(req, db)
+    ["auth", "login"] -> session.login(req, db, auth.generate_csrf_token)
     ["users"] ->
       case req.method {
         // Signup - no validation

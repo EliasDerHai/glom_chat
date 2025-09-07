@@ -1,7 +1,6 @@
 import endpoints
 import form.{type FormField}
 import gleam/bool
-import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/int
@@ -16,7 +15,7 @@ import lustre/element/html
 import lustre/element/keyed
 import lustre/event
 import rsvp
-import user
+import shared_user.{type UserDto, CreateUserDto}
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {
@@ -74,21 +73,12 @@ pub fn init() {
 }
 
 // UPDATE -----------------------------------------------------------------------
-pub type SignupResponse {
-  SignupResponse(
-    id: String,
-    username: String,
-    email: String,
-    email_verified: Bool,
-  )
-}
-
 pub type PreLoginMsg {
   UserSetPreLoginMode(PreLoginMode)
   UserSubmitForm
   UserChangeForm(PreLoginFormProperty, String)
   UserBlurForm(PreLoginFormProperty)
-  ApiRespondSignupRequest(Result(SignupResponse, rsvp.Error))
+  ApiRespondSignupRequest(Result(UserDto, rsvp.Error))
 }
 
 pub type PreLoginFormProperty {
@@ -251,13 +241,13 @@ pub fn update(
 
 fn send_signup_req(
   signup_details: SignupDetails,
-  on_response handle_response: fn(Result(SignupResponse, rsvp.Error)) -> msg,
+  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> msg,
 ) -> Effect(msg) {
   let url = endpoints.users()
-  let handler = rsvp.expect_json(decode_signup_response(), handle_response)
+  let handler = rsvp.expect_json(shared_user.decode_user_dto(), handle_response)
 
   let create =
-    user.CreateUserDto(
+    CreateUserDto(
       signup_details.username.value |> form.get_form_field_value_as_string,
       signup_details.email.value |> form.get_form_field_value_as_string,
       signup_details.password.value |> form.get_form_field_value_as_string,
@@ -268,26 +258,13 @@ fn send_signup_req(
       request
       |> request.set_method(http.Post)
       |> request.set_header("content-type", "application/json")
-      |> request.set_body(json.to_string(create |> user.create_user_dto_to_json))
+      |> request.set_body(json.to_string(
+        create |> shared_user.create_user_dto_to_json,
+      ))
       |> rsvp.send(handler)
 
     Error(_) -> panic as { "Failed to create request to " <> url }
   }
-}
-
-/// expected server response:
-/// {
-///   "id": "0199163d-e168-753a-abb9-c09aab0123cd",
-///   "username": "Tom",
-///   "email": "tom@gleam.com",
-///   "email_verified": false
-/// }
-fn decode_signup_response() -> decode.Decoder(SignupResponse) {
-  use id <- decode.field("id", decode.string)
-  use username <- decode.field("username", decode.string)
-  use email <- decode.field("email", decode.string)
-  use email_verified <- decode.field("email_verified", decode.bool)
-  decode.success(SignupResponse(id, username, email, email_verified))
 }
 
 // VIEW -----------------------------------------------------------------------
