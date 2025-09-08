@@ -5,7 +5,8 @@ import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import pre_login
-import toast
+import toast.{type Toast}
+import util/time_util
 
 // MAIN ------------------------------------------------------------------------
 
@@ -34,7 +35,7 @@ pub type AppState {
 /// - configs (potentially)
 /// shouldn't relate to business logic
 pub type GlobalState {
-  GlobalState(toasts: List(toast.Toast))
+  GlobalState(toasts: List(Toast))
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
@@ -47,6 +48,8 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
 
 pub type Msg {
   PreLoginMsg(pre_login.PreLoginMsg)
+  ShowToast(Toast)
+  RemoveToast(Int)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -58,6 +61,27 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Model(PreLogin(pre_login_model), model.global_state),
         effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
       )
+    }
+
+    _, ShowToast(toast_msg) -> {
+      let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
+      let new_global_state = GlobalState(new_toasts)
+      let timeout_effect =
+        effect.from(fn(dispatch) {
+          time_util.set_timeout(
+            fn() { dispatch(RemoveToast(toast_msg.id)) },
+            toast_msg.duration,
+          )
+          Nil
+        })
+      #(Model(model.app_state, new_global_state), timeout_effect)
+    }
+
+    _, RemoveToast(toast_id) -> {
+      let new_toasts =
+        toast.remove_toast_by_id(model.global_state.toasts, toast_id)
+      let new_global_state = GlobalState(new_toasts)
+      #(Model(model.app_state, new_global_state), effect.none())
     }
 
     LoggedIn, _ -> #(Model(LoggedIn, model.global_state), effect.none())
