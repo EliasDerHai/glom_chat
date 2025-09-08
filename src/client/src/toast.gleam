@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp
+import util/time_util
 
 pub type Toast {
   Toast(id: Int, content: String, toast_style: ToastStyle, duration: Duration)
@@ -12,10 +13,14 @@ pub type ToastStyle {
   Failure
 }
 
-pub fn create_info_toast(content: String, duration: Duration) -> Toast {
+pub fn create_info_toast(content: String) -> Toast {
   timestamp.to_unix_seconds_and_nanoseconds(timestamp.system_time())
-  todo
-  // Toast(content: content, toast_style: style, duration: duration)
+  Toast(
+    time_util.millis_now(),
+    content: content,
+    toast_style: Info,
+    duration: duration.seconds(5),
+  )
 }
 
 pub fn add_toast(toasts: List(Toast), toast: Toast) -> List(Toast) {

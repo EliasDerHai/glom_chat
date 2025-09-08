@@ -16,6 +16,7 @@ import lustre/element/keyed
 import lustre/event
 import rsvp
 import shared_user.{type UserDto, CreateUserDto}
+import toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {
@@ -79,6 +80,7 @@ pub type PreLoginMsg {
   UserChangeForm(PreLoginFormProperty, String)
   UserBlurForm(PreLoginFormProperty)
   ApiRespondSignupRequest(Result(UserDto, rsvp.Error))
+  ShowToast(Toast)
 }
 
 pub type PreLoginFormProperty {
@@ -127,6 +129,8 @@ pub fn update(
     // FIXME: after switching mode (== toggle login/signup) 
     // UI state is out of sync with model
     UserSetPreLoginMode(mode) -> PreLoginState(..model, mode: mode)
+
+    ShowToast(_) -> model
 
     UserChangeForm(field, value) -> {
       let value = form.StringField(value)
@@ -205,8 +209,7 @@ pub fn update(
 
     ApiRespondSignupRequest(result) -> {
       case result {
-        Ok(signup_response) -> {
-          io.println("Signup successful for user: " <> signup_response.username)
+        Ok(_) -> {
           PreLoginState(..model, mode: Login)
         }
         Error(error) -> {
@@ -233,6 +236,24 @@ pub fn update(
         }
       }
     }
+
+    ApiRespondSignupRequest(result) -> {
+      case result {
+        Ok(signup_response) -> {
+          let toast_msg =
+            toast.create_info_toast(
+              "Signup successful for user: " <> signup_response.username,
+            )
+          effect.from(fn(dispatch) {
+            dispatch(ShowToast(toast_msg))
+            Nil
+          })
+        }
+        Error(_) -> effect.none()
+      }
+    }
+
+    ShowToast(_) -> effect.none()
     _ -> effect.none()
   }
 
