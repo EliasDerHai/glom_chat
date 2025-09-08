@@ -207,19 +207,8 @@ pub fn update(
       }
     }
 
-    ApiRespondSignupRequest(result) -> {
-      case result {
-        Ok(_) -> {
-          PreLoginState(..model, mode: Login)
-        }
-        Error(error) -> {
-          io.println("Signup failed")
-          echo error
-          model
-        }
-      }
-    }
-
+    ApiRespondSignupRequest(Ok(_)) -> PreLoginState(..model, mode: Login)
+    ApiRespondSignupRequest(Error(_)) -> model
     UserSubmitForm -> model
   }
 
@@ -238,19 +227,22 @@ pub fn update(
     }
 
     ApiRespondSignupRequest(result) -> {
-      case result {
-        Ok(signup_response) -> {
-          let toast_msg =
-            toast.create_info_toast(
-              "Signup successful for user: " <> signup_response.username,
-            )
-          effect.from(fn(dispatch) {
-            dispatch(ShowToast(toast_msg))
-            Nil
-          })
+      fn(dispatch) {
+        let toast = case result {
+          Ok(signup_response) ->
+            { "Signup successful for user: " <> signup_response.username }
+            |> toast.create_info_toast
+
+          Error(_) ->
+            "Signup failed"
+            |> toast.create_error_toast
         }
-        Error(_) -> effect.none()
+
+        toast
+        |> ShowToast
+        |> dispatch
       }
+      |> effect.from
     }
 
     ShowToast(_) -> effect.none()

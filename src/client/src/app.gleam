@@ -55,33 +55,21 @@ pub type Msg {
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case model.app_state, msg {
     // ### TOASTS ###
-    _, PreLoginMsg(pre_login.ShowToast(toast_msg)) -> {
-      // Handle ShowToast from pre_login by converting it to the main ShowToast message
+    _, PreLoginMsg(pre_login.ShowToast(toast_msg)) | _, ShowToast(toast_msg) -> {
       let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
       let new_global_state = GlobalState(new_toasts)
-      let timeout_effect =
+      let remove_toast_after_timeout_effect =
         effect.from(fn(dispatch) {
           time_util.set_timeout(
             fn() { dispatch(RemoveToast(toast_msg.id)) },
             toast_msg.duration,
           )
-          Nil
         })
-      #(Model(model.app_state, new_global_state), timeout_effect)
-    }
 
-    _, ShowToast(toast_msg) -> {
-      let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
-      let new_global_state = GlobalState(new_toasts)
-      let timeout_effect =
-        effect.from(fn(dispatch) {
-          time_util.set_timeout(
-            fn() { dispatch(RemoveToast(toast_msg.id)) },
-            toast_msg.duration,
-          )
-          Nil
-        })
-      #(Model(model.app_state, new_global_state), timeout_effect)
+      #(
+        Model(model.app_state, new_global_state),
+        remove_toast_after_timeout_effect,
+      )
     }
 
     _, RemoveToast(toast_id) -> {
@@ -108,11 +96,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 // VIEW ------------------------------------------------------------------------
 
 fn view(model: Model) -> Element(Msg) {
-  case model.app_state {
-    LoggedIn -> html.div([], [html.text("Welcome!")])
-    PreLogin(state) ->
-      element.map(pre_login.view_login_signup(state), fn(pre_msg) {
-        PreLoginMsg(pre_msg)
-      })
-  }
+  html.div([], [
+    // Main content based on app state
+    case model.app_state {
+      LoggedIn -> html.div([], [html.text("Welcome!")])
+      PreLogin(state) ->
+        element.map(pre_login.view_login_signup(state), fn(pre_msg) {
+          PreLoginMsg(pre_msg)
+        })
+    },
+    // Toast notifications overlay
+    toast.view_toasts(model.global_state.toasts),
+  ])
 }
