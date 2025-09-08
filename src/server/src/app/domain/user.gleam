@@ -56,6 +56,13 @@ pub fn list_users(db: DbPool) -> Response {
   }
 }
 
+type CreateUserErrorReason {
+  MalformedPayload
+  ServerError
+  EmailTaken
+  UsernameTaken
+}
+
 /// POST `/users` endpoint
 pub fn create_user(req: Request, db: DbPool) -> Response {
   use json <- wisp.require_json(req)
@@ -66,26 +73,41 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
     use dto <- result.try(
       decode.run(json, shared_user.decode_create_user_dto())
-      |> result.map_error(fn(_) { Nil }),
+      |> result.map_error(fn(_) { MalformedPayload }),
     )
+
+    use _ <- result.try(case sql.select_user_by_username(conn, dto.username) {
+      Ok(r) if r.count >= 1 -> Error(UsernameTaken)
+      _ -> Ok(Nil)
+    })
+
+    use _ <- result.try(case sql.select_user_by_email(conn, dto.email) {
+      Ok(r) if r.count >= 1 -> Error(UsernameTaken)
+      _ -> Ok(Nil)
+    })
 
     use _ <- result.try(
       conn
       |> sql.create_user(user_id, dto.username, dto.email, False, dto.password)
-      |> result.map_error(fn(_) { Nil }),
+      |> result.map_error(fn(_) { ServerError }),
     )
 
     Ok(UserEntity(user_id, dto.username, dto.email, False))
   }
 
   case result {
-    Error(_) -> wisp.bad_request()
     Ok(entity) ->
       entity
       |> to_dto
       |> shared_user.to_json
       |> json.to_string_tree
       |> wisp.json_response(201)
+
+    Error(MalformedPayload) -> wisp.bad_request()
+    Error(ServerError) -> wisp.internal_server_error()
+    Error(EmailTaken) -> wisp.response(400) |> wisp.string_body("email-taken")
+    Error(UsernameTaken) ->
+      wisp.response(400) |> wisp.string_body("username-taken")
   }
 }
 

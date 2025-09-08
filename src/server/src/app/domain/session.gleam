@@ -32,7 +32,7 @@ pub type SessionEntity {
   )
 }
 
-pub fn from_get_session_row(row: sql.GetSessionByIdRow) -> SessionEntity {
+pub fn from_get_session_row(row: sql.SelectSessionByIdRow) -> SessionEntity {
   SessionEntity(
     id: row.id,
     user_id: row.user_id,
@@ -42,7 +42,7 @@ pub fn from_get_session_row(row: sql.GetSessionByIdRow) -> SessionEntity {
 }
 
 pub fn from_get_session_by_user_id_row(
-  row: sql.GetSessionByUserIdRow,
+  row: sql.SelectSessionByUserIdRow,
 ) -> SessionEntity {
   SessionEntity(
     id: row.id,
@@ -82,7 +82,7 @@ fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
   use query_result <- result.try(
     db
     |> pool.conn()
-    |> sql.get_session_by_id(session_id)
+    |> sql.select_session_by_id(session_id)
     |> result.map_error(fn(_) { Nil }),
   )
 
@@ -101,7 +101,7 @@ fn get_session_by_user_id(
 ) -> Result(Option(SessionEntity), Nil) {
   db
   |> pool.conn()
-  |> sql.get_session_by_user_id(user_id)
+  |> sql.select_session_by_user_id(user_id)
   |> result.map(fn(r) {
     list.first(r.rows)
     |> option.from_result
@@ -121,7 +121,7 @@ fn delete_session(db: DbPool, session_id: Uuid) -> Result(Nil, Nil) {
 fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
   db
   |> pool.conn()
-  |> sql.cleanup_expired_sessions()
+  |> sql.delete_expired_sessions()
   |> result.map(fn(_) { Nil })
   |> result.map_error(fn(_) { Nil })
 }
@@ -234,11 +234,11 @@ fn verify_user_credentials_and_create_session(
   use query_result <- result.try(
     db
     |> pool.conn()
-    |> sql.verify_user_credentials(dto.username, dto.password)
+    |> sql.select_user_by_credentials(dto.username, dto.password)
     |> result.map_error(fn(_) { wisp.internal_server_error() }),
   )
 
-  use sql.VerifyUserCredentialsRow(user_id) <- result.try(
+  use sql.SelectUserByCredentialsRow(user_id) <- result.try(
     query_result.rows
     |> list.first
     |> result.map_error(fn(_) { wisp.response(503) }),

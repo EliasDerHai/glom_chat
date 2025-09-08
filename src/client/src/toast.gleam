@@ -65,7 +65,7 @@ fn view_single_toast(toast: Toast) -> Element(msg) {
   html.div(
     [
       attribute.class(
-        "px-4 py-3 rounded-lg border shadow-sm pointer-events-auto min-w-64 max-w-80 "
+        "px-4 py-3 rounded-lg border shadow-sm pointer-events-auto min-w-64 max-w-80 whitespace-pre "
         <> style_classes,
       ),
     ],

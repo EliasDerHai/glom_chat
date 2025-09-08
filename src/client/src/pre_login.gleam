@@ -233,9 +233,16 @@ pub fn update(
             { "Signup successful for user: " <> signup_response.username }
             |> toast.create_info_toast
 
-          Error(_) ->
-            "Signup failed"
+          Error(e) -> {
+            case e {
+              rsvp.HttpError(r) if r.body == "username-taken" ->
+                "Signup failed:\nUsername is already taken!"
+              rsvp.HttpError(r) if r.body == "email-taken" ->
+                "Signup failed:\nEmail is already in use!"
+              _ -> "Signup failed!"
+            }
             |> toast.create_error_toast
+          }
         }
 
         toast

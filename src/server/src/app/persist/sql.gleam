@@ -10,21 +10,6 @@ import gleam/time/timestamp.{type Timestamp}
 import pog
 import youid/uuid.{type Uuid}
 
-/// Runs the `cleanup_expired_sessions` query
-/// defined in `./src/app/persist/sql/cleanup_expired_sessions.sql`.
-///
-/// > 🐿️ This function was generated automatically using v4.2.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn cleanup_expired_sessions(db) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "DELETE FROM sessions WHERE expires_at <= now();"
-  |> pog.query
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
 /// Runs the `create_session` query
 /// defined in `./src/app/persist/sql/create_session.sql`.
 ///
@@ -67,6 +52,22 @@ VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
   |> pog.execute(db)
 }
 
+/// Runs the `delete_expired_sessions` query
+/// defined in `./src/app/persist/sql/delete_expired_sessions.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn delete_expired_sessions(db) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "DELETE FROM sessions WHERE expires_at <= now();
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `delete_session` query
 /// defined in `./src/app/persist/sql/delete_session.sql`.
 ///
@@ -100,14 +101,14 @@ pub fn delete_user(db, arg_1) {
   |> pog.execute(db)
 }
 
-/// A row you get from running the `get_session_by_id` query
-/// defined in `./src/app/persist/sql/get_session_by_id.sql`.
+/// A row you get from running the `select_session_by_id` query
+/// defined in `./src/app/persist/sql/select_session_by_id.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.2.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub type GetSessionByIdRow {
-  GetSessionByIdRow(
+pub type SelectSessionByIdRow {
+  SelectSessionByIdRow(
     id: Uuid,
     user_id: Uuid,
     created_at: Timestamp,
@@ -116,20 +117,20 @@ pub type GetSessionByIdRow {
   )
 }
 
-/// Runs the `get_session_by_id` query
-/// defined in `./src/app/persist/sql/get_session_by_id.sql`.
+/// Runs the `select_session_by_id` query
+/// defined in `./src/app/persist/sql/select_session_by_id.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn get_session_by_id(db, arg_1) {
+pub fn select_session_by_id(db, arg_1) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
     use user_id <- decode.field(1, uuid_decoder())
     use created_at <- decode.field(2, pog.timestamp_decoder())
     use expires_at <- decode.field(3, pog.timestamp_decoder())
     use csrf_secret <- decode.field(4, decode.string)
-    decode.success(GetSessionByIdRow(
+    decode.success(SelectSessionByIdRow(
       id:,
       user_id:,
       created_at:,
@@ -140,21 +141,22 @@ pub fn get_session_by_id(db, arg_1) {
 
   "SELECT id, user_id, created_at, expires_at, csrf_secret
 FROM sessions 
-WHERE id = $1 AND expires_at > now();"
+WHERE id = $1 AND expires_at > now();
+"
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
 
-/// A row you get from running the `get_session_by_user_id` query
-/// defined in `./src/app/persist/sql/get_session_by_user_id.sql`.
+/// A row you get from running the `select_session_by_user_id` query
+/// defined in `./src/app/persist/sql/select_session_by_user_id.sql`.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.2.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub type GetSessionByUserIdRow {
-  GetSessionByUserIdRow(
+pub type SelectSessionByUserIdRow {
+  SelectSessionByUserIdRow(
     id: Uuid,
     user_id: Uuid,
     created_at: Timestamp,
@@ -163,20 +165,20 @@ pub type GetSessionByUserIdRow {
   )
 }
 
-/// Runs the `get_session_by_user_id` query
-/// defined in `./src/app/persist/sql/get_session_by_user_id.sql`.
+/// Runs the `select_session_by_user_id` query
+/// defined in `./src/app/persist/sql/select_session_by_user_id.sql`.
 ///
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn get_session_by_user_id(db, arg_1) {
+pub fn select_session_by_user_id(db, arg_1) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
     use user_id <- decode.field(1, uuid_decoder())
     use created_at <- decode.field(2, pog.timestamp_decoder())
     use expires_at <- decode.field(3, pog.timestamp_decoder())
     use csrf_secret <- decode.field(4, decode.string)
-    decode.success(GetSessionByUserIdRow(
+    decode.success(SelectSessionByUserIdRow(
       id:,
       user_id:,
       created_at:,
@@ -244,6 +246,100 @@ pub fn select_user(db, arg_1) {
   |> pog.execute(db)
 }
 
+/// A row you get from running the `select_user_by_credentials` query
+/// defined in `./src/app/persist/sql/select_user_by_credentials.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.2.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectUserByCredentialsRow {
+  SelectUserByCredentialsRow(id: Uuid)
+}
+
+/// Runs the `select_user_by_credentials` query
+/// defined in `./src/app/persist/sql/select_user_by_credentials.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_user_by_credentials(db, arg_1, arg_2) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    decode.success(SelectUserByCredentialsRow(id:))
+  }
+
+  "SELECT id
+FROM users
+WHERE username = $1
+  AND password_hash = crypt($2, password_hash);
+"
+  |> pog.query
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `select_user_by_email` query
+/// defined in `./src/app/persist/sql/select_user_by_email.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.2.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectUserByEmailRow {
+  SelectUserByEmailRow(id: Uuid)
+}
+
+/// Runs the `select_user_by_email` query
+/// defined in `./src/app/persist/sql/select_user_by_email.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_user_by_email(db, arg_1) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    decode.success(SelectUserByEmailRow(id:))
+  }
+
+  "SELECT id FROM users WHERE email = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `select_user_by_username` query
+/// defined in `./src/app/persist/sql/select_user_by_username.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.2.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectUserByUsernameRow {
+  SelectUserByUsernameRow(id: Uuid)
+}
+
+/// Runs the `select_user_by_username` query
+/// defined in `./src/app/persist/sql/select_user_by_username.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.2.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_user_by_username(db, arg_1) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    decode.success(SelectUserByUsernameRow(id:))
+  }
+
+  "SELECT id FROM users WHERE username = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_users` query
 /// defined in `./src/app/persist/sql/select_users.sql`.
 ///
@@ -290,40 +386,6 @@ pub fn select_users(db, arg_1, arg_2) {
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
   |> pog.parameter(pog.int(arg_2))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-/// A row you get from running the `verify_user_credentials` query
-/// defined in `./src/app/persist/sql/verify_user_credentials.sql`.
-///
-/// > 🐿️ This type definition was generated automatically using v4.2.0 of the
-/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub type VerifyUserCredentialsRow {
-  VerifyUserCredentialsRow(id: Uuid)
-}
-
-/// Runs the `verify_user_credentials` query
-/// defined in `./src/app/persist/sql/verify_user_credentials.sql`.
-///
-/// > 🐿️ This function was generated automatically using v4.2.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn verify_user_credentials(db, arg_1, arg_2) {
-  let decoder = {
-    use id <- decode.field(0, uuid_decoder())
-    decode.success(VerifyUserCredentialsRow(id:))
-  }
-
-  "SELECT id
-FROM users
-WHERE username = $1
-  AND password_hash = crypt($2, password_hash);
-"
-  |> pog.query
-  |> pog.parameter(pog.text(arg_1))
-  |> pog.parameter(pog.text(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
