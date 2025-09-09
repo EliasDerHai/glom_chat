@@ -6,3 +6,7 @@ const api = "http://localhost:1234/api/"
 pub fn users() {
   api <> "users"
 }
+
+pub fn login() {
+  api <> "auth/login"
+}

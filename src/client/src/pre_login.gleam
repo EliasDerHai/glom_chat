@@ -4,7 +4,6 @@ import gleam/bool
 import gleam/http
 import gleam/http/request
 import gleam/int
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option
@@ -80,6 +79,7 @@ pub type PreLoginMsg {
   UserChangeForm(PreLoginFormProperty, String)
   UserBlurForm(PreLoginFormProperty)
   ApiRespondSignupRequest(Result(UserDto, rsvp.Error))
+  ApiRespondLoginRequest(Result(UserDto, rsvp.Error))
   ShowToast(Toast)
 }
 
@@ -209,40 +209,34 @@ pub fn update(
 
     ApiRespondSignupRequest(Ok(_)) -> PreLoginState(..model, mode: Login)
     ApiRespondSignupRequest(Error(_)) -> model
+    ApiRespondLoginRequest(_) -> model
     UserSubmitForm -> model
   }
 
   let effect = case msg {
-    UserSubmitForm -> {
+    UserSubmitForm ->
       case model.mode {
-        Signup -> {
+        Signup ->
           send_signup_req(model.signup_form_data, ApiRespondSignupRequest)
-        }
-        Login -> {
-          // TODO: Implement login request
-          io.println("Login functionality not yet implemented")
-          effect.none()
-        }
+        Login -> send_login_req(model.login_form_data, ApiRespondLoginRequest)
       }
-    }
 
-    ApiRespondSignupRequest(result) -> {
+    ApiRespondSignupRequest(result) ->
       fn(dispatch) {
         let toast = case result {
           Ok(signup_response) ->
             { "Signup successful for user: " <> signup_response.username }
             |> toast.create_info_toast
 
-          Error(e) -> {
+          Error(e) ->
             case e {
               rsvp.HttpError(r) if r.body == "username-taken" ->
-                "Signup failed:\nUsername is already taken!"
+                "Signup failed:\nUsername is already taken"
               rsvp.HttpError(r) if r.body == "email-taken" ->
-                "Signup failed:\nEmail is already in use!"
-              _ -> "Signup failed!"
+                "Signup failed:\nEmail is already in use"
+              _ -> "Signup failed"
             }
             |> toast.create_error_toast
-          }
         }
 
         toast
@@ -250,9 +244,23 @@ pub fn update(
         |> dispatch
       }
       |> effect.from
-    }
 
-    ShowToast(_) -> effect.none()
+    ApiRespondLoginRequest(Error(e)) ->
+      fn(dispatch) {
+        let toast =
+          case e {
+            rsvp.HttpError(r) if r.status == 401 ->
+              "Login failed:\nWrong username/password"
+            _ -> "Login failed:\nUnexpected Error"
+          }
+          |> toast.create_error_toast
+
+        toast
+        |> ShowToast
+        |> dispatch
+      }
+      |> effect.from
+
     _ -> effect.none()
   }
 
@@ -261,8 +269,8 @@ pub fn update(
 
 fn send_signup_req(
   signup_details: SignupDetails,
-  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> msg,
-) -> Effect(msg) {
+  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> PreLoginMsg,
+) -> Effect(PreLoginMsg) {
   let url = endpoints.users()
   let handler = rsvp.expect_json(shared_user.decode_user_dto(), handle_response)
 
@@ -280,6 +288,33 @@ fn send_signup_req(
       |> request.set_header("content-type", "application/json")
       |> request.set_body(json.to_string(
         create |> shared_user.create_user_dto_to_json,
+      ))
+      |> rsvp.send(handler)
+
+    Error(_) -> panic as { "Failed to create request to " <> url }
+  }
+}
+
+fn send_login_req(
+  login_details: LoginDetails,
+  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> PreLoginMsg,
+) -> Effect(PreLoginMsg) {
+  let url = endpoints.login()
+  let handler = rsvp.expect_json(shared_user.decode_user_dto(), handle_response)
+
+  let create =
+    shared_user.UserLoginDto(
+      login_details.username.value |> form.get_form_field_value_as_string,
+      login_details.password.value |> form.get_form_field_value_as_string,
+    )
+
+  case request.to(url) {
+    Ok(request) ->
+      request
+      |> request.set_method(http.Post)
+      |> request.set_header("content-type", "application/json")
+      |> request.set_body(json.to_string(
+        create |> shared_user.user_loging_dto_to_json,
       ))
       |> rsvp.send(handler)
 

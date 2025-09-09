@@ -130,7 +130,7 @@ pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
   |> result.unwrap_both
 }
 
-fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+pub fn select_user(db: DbPool, id: Uuid) -> Result(UserEntity, Response) {
   use query_result <- result.try(
     db
     |> pool.conn()
@@ -144,8 +144,12 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
     |> result.map_error(fn(_) { wisp.not_found() }),
   )
 
-  row
-  |> from_select_user_row
+  row |> from_select_user_row |> Ok
+}
+
+fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+  use user <- result.try(select_user(db, id))
+  user
   |> to_dto
   |> shared_user.to_json
   |> json.to_string_tree

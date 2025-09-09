@@ -5,6 +5,7 @@ import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import pre_login.{type PreLoginMsg}
+import shared_user
 import toast.{type Toast}
 import util/time_util
 
@@ -27,7 +28,7 @@ pub type Model {
 /// state of the app/route with business logic
 pub type AppState {
   PreLogin(pre_login.PreLoginState)
-  LoggedIn
+  LoggedIn(shared_user.UserDto)
 }
 
 /// separate global state incl.
@@ -83,13 +84,24 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     PreLogin(pre_login_model), PreLoginMsg(msg) -> {
       let #(pre_login_model, pre_login_effect) =
         pre_login.update(pre_login_model, msg)
-      #(
-        Model(PreLogin(pre_login_model), model.global_state),
-        effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
-      )
+
+      case msg {
+        pre_login.ApiRespondLoginRequest(Ok(user_dto)) -> #(
+          Model(LoggedIn(user_dto), model.global_state),
+          effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
+        )
+
+        _ -> #(
+          Model(PreLogin(pre_login_model), model.global_state),
+          effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
+        )
+      }
     }
 
-    LoggedIn, _ -> #(Model(LoggedIn, model.global_state), effect.none())
+    LoggedIn(model), PreLoginMsg(msg) -> {
+      echo #(model, msg)
+      panic as "Unexpected combination"
+    }
   }
 }
 
@@ -99,7 +111,8 @@ fn view(model: Model) -> Element(Msg) {
   html.div([], [
     // Main content based on app state
     case model.app_state {
-      LoggedIn -> html.div([], [html.text("Welcome!")])
+      LoggedIn(shared_user.UserDto(_id, username, _email, _email_verified)) ->
+        html.div([], [html.text("Welcome " <> username <> "!")])
       PreLogin(state) ->
         element.map(pre_login.view_login_signup(state), fn(pre_msg) {
           PreLoginMsg(pre_msg)

@@ -123,7 +123,10 @@ pub type SelectSessionByIdRow {
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn select_session_by_id(db, arg_1) {
+pub fn select_session_by_id(
+  db: pog.Connection,
+  arg_1: Uuid,
+) -> Result(pog.Returned(SelectSessionByIdRow), pog.QueryError) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
     use user_id <- decode.field(1, uuid_decoder())
@@ -220,7 +223,10 @@ pub type SelectUserRow {
 /// > 🐿️ This function was generated automatically using v4.2.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub fn select_user(db, arg_1) {
+pub fn select_user(
+  db: pog.Connection,
+  arg_1: Uuid,
+) -> Result(pog.Returned(SelectUserRow), pog.QueryError) {
   let decoder = {
     use id <- decode.field(0, uuid_decoder())
     use username <- decode.field(1, decode.string)

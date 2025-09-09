@@ -1,3 +1,4 @@
+import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -144,25 +145,34 @@ pub fn login(
 
   case verify_user_credentials_and_create_session(db, json) {
     Ok(session) -> {
-      let csrf_token =
-        csrf_token_builder(session) |> bit_array.base64_url_encode(False)
-
-      wisp.ok()
-      |> wisp.set_cookie(
-        req,
-        "session_id",
-        uuid.to_string(session.id),
-        wisp.Signed,
-        day_in_seconds,
-      )
-      |> wisp.set_cookie(
-        req,
-        "csrf_token",
-        csrf_token,
-        wisp.PlainText,
-        day_in_seconds,
-      )
-      |> wisp.set_header("content-type", "application/json")
+      case user.select_user(db, session.user_id) {
+        Ok(user_entity) -> {
+          wisp.ok()
+          |> wisp.set_cookie(
+            req,
+            "session_id",
+            uuid.to_string(session.id),
+            wisp.Signed,
+            day_in_seconds,
+          )
+          |> wisp.set_cookie(
+            req,
+            "csrf_token",
+            session
+              |> csrf_token_builder
+              |> bit_array.base64_url_encode(False),
+            wisp.PlainText,
+            day_in_seconds,
+          )
+          |> wisp.json_body(
+            user_entity
+            |> user.to_dto
+            |> shared_user.to_json
+            |> json.to_string_tree,
+          )
+        }
+        Error(response) -> response
+      }
     }
     Error(response) -> response
   }
@@ -241,7 +251,7 @@ fn verify_user_credentials_and_create_session(
   use sql.SelectUserByCredentialsRow(user_id) <- result.try(
     query_result.rows
     |> list.first
-    |> result.map_error(fn(_) { wisp.response(503) }),
+    |> result.map_error(fn(_) { wisp.response(401) }),
   )
 
   use old_session <- result.try(
