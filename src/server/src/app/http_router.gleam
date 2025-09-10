@@ -8,7 +8,10 @@ import wisp.{type Request, type Response}
 import wisp/wisp_mist
 
 pub fn handle_http_request(db: DbPool, secret_key: String) {
-  wisp_mist.handler(fn(req) { handle_request(req, db) }, secret_key)
+  wisp_mist.handler(
+    fn(req: wisp.Request) { handle_request(req, db) },
+    secret_key,
+  )
 }
 
 fn handle_request(req: Request, db: DbPool) -> Response {

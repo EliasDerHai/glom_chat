@@ -1,24 +1,67 @@
+import app/domain/session
 import app/persist/pool.{type DbPool}
+import app/registry.{type RegistryMessage, Register, Unregister}
+import gleam/erlang/process
+import gleam/http/request
+import gleam/io
 import gleam/option
-import mist.{type Next, type WebsocketMessage}
+import gleam/otp/actor
+import gleam/result
+import gleam/string
+import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
+import wisp
+import youid/uuid.{type Uuid}
 
-pub fn handle_ws_request(db: pool.DbPool) {
+pub type WsState {
+  WsState(user_id: Uuid)
+}
+
+pub fn handle_ws_request(
+  http_req,
+  db: DbPool,
+  registry: process.Subject(RegistryMessage),
+) {
+  // use session <- session.get_session_from_cookie(req)
   fn(req) {
     mist.websocket(
       request: req,
-      on_init: fn(_conn) { #(Nil, option.None) },
-      on_close: fn(_state) { Nil },
+      on_init: fn(conn) {
+        todo
+        //        case
+        //          {
+        //            use session <- result.try(session.get_session_from_cookie(
+        //              http_req,
+        //              db,
+        //            ))
+        //
+        //            // Send a message to the registry to add this connection
+        //            actor.send(registry, Register(session.user_id, conn))
+        //
+        //            // Store the user_id in this connection's state
+        //            let state = WsState(user_id: session.user_id)
+        //            #(state, option.None) |> Ok
+        //          }
+        //        {
+        //          Error(_) -> todo
+        //          Ok(s) -> s
+        //        }
+      },
+      on_close: fn(state) {
+        // On close, send a message to unregister this user
+        actor.send(registry, Unregister(state.user_id))
+        Nil
+      },
       handler: fn(state, msg, conn) { handle_ws_message(state, msg, conn, db) },
     )
   }
 }
 
 fn handle_ws_message(
-  state: state,
+  state: WsState,
   msg: WebsocketMessage(message),
-  conn: mist.WebsocketConnection,
+  conn: WebsocketConnection,
   db: DbPool,
-) -> Next(state, conn) {
+) -> Next(WsState, conn) {
   case msg {
     mist.Text(text) -> {
       handle_text_messages(text, conn, db)
@@ -31,7 +74,7 @@ fn handle_ws_message(
 
 fn handle_text_messages(
   raw: String,
-  conn: mist.WebsocketConnection,
+  conn: WebsocketConnection,
   _db: DbPool,
 ) -> Nil {
   let r = case raw {
@@ -41,7 +84,8 @@ fn handle_text_messages(
 
   case r {
     Error(error_reason) -> {
-      echo error_reason
+      let error_string = string.inspect(error_reason)
+      io.println("Error sending websocket frame: " <> error_string)
       Nil
     }
     Ok(Nil) -> Nil

@@ -7,6 +7,8 @@ import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/float
 import gleam/http.{Post}
+import gleam/http/cookie
+import gleam/http/request
 import gleam/io
 import gleam/json
 import gleam/list
@@ -201,8 +203,29 @@ pub fn logout(req: Request, db: DbPool) -> Response {
 // Helper Functions
 // ################################################################################
 
+//pub fn get_cookie_from_any_header(
+//  headers: List(http.Header),
+//  secret
+//) -> Result(String, Nil) {
+//  use value <- result.try(
+//    headers
+//    |> list.filter_map(fn(header) {
+//      let #(name, value) = header
+//      case name {
+//        "cookie" -> Ok(cookie.parse(value))
+//        _ -> Error(Nil)
+//      }
+//    })
+//    |> list.flatten()
+//    |> list.key_find("session_id"),
+//  )
+//
+//  use value <- result.try(crypto.verify_signed_message(value, secret))
+//  bit_array.to_string(value)
+//}
+
 pub fn get_session_from_cookie(
-  req: Request,
+  req: wisp.Request,
   db: DbPool,
 ) -> Result(SessionEntity, Response) {
   use session_id_str <- result.try(

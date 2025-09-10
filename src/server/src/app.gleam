@@ -2,6 +2,7 @@ import app/environment
 import app/http_router
 import app/persist/migration
 import app/persist/pool
+import app/registry
 import app/websocket
 import gleam/erlang/process
 import gleam/http/request
@@ -19,10 +20,13 @@ pub fn main() {
   migration.migrate_db()
   let #(_supervisor, db) = pool.new_supervisor_with_pool()
 
+  // Start the registry actor and get its Pid
+  let registry_subject = registry.start()
+
   let assert Ok(_) =
     fn(req) {
       case request.path_segments(req) {
-        ["ws"] -> websocket.handle_ws_request(db)(req)
+        ["ws"] -> websocket.handle_ws_request(req, db, registry_subject)(req)
         _ -> http_router.handle_http_request(db, secret_key)(req)
       }
     }
