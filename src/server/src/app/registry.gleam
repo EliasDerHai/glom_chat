@@ -13,7 +13,7 @@ pub type RegistryMessage {
 type State =
   dict.Dict(Uuid, WebsocketConnection)
 
-pub fn start() -> process.Subject(RegistryMessage) {
+pub fn init() -> process.Subject(RegistryMessage) {
   let assert Ok(started) =
     actor.new(dict.new())
     |> actor.on_message(handle_message)
@@ -26,8 +26,14 @@ fn handle_message(
   message: RegistryMessage,
 ) -> actor.Next(State, RegistryMessage) {
   case message {
-    Register(user_id, conn) -> dict.insert(state, user_id, conn)
-    Unregister(user_id) -> dict.delete(state, user_id)
+    Register(user_id, conn) -> {
+      echo { "registered " <> uuid.to_string(user_id) }
+      dict.insert(state, user_id, conn)
+    }
+    Unregister(user_id) -> {
+      echo { "unregistered " <> uuid.to_string(user_id) }
+      dict.delete(state, user_id)
+    }
   }
   |> actor.continue
 }

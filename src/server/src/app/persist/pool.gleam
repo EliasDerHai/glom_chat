@@ -1,6 +1,5 @@
 import envoy
 import gleam/erlang/process.{type Name}
-import gleam/otp/actor
 import gleam/otp/static_supervisor
 import gleam/result
 import pog
@@ -9,10 +8,7 @@ pub type DbPool {
   DbPool(name: Name(pog.Message))
 }
 
-pub fn new_supervisor_with_pool() -> #(
-  actor.Started(static_supervisor.Supervisor),
-  DbPool,
-) {
+pub fn init() -> DbPool {
   let name = process.new_name("pog")
 
   let child =
@@ -20,13 +16,13 @@ pub fn new_supervisor_with_pool() -> #(
     |> config
     |> pog.supervised
 
-  let assert Ok(started) =
+  let assert Ok(_) =
     static_supervisor.new(static_supervisor.OneForOne)
     |> static_supervisor.add(child)
     |> static_supervisor.start
     as "db supervisor failed"
 
-  #(started, DbPool(name))
+  DbPool(name)
 }
 
 fn config(name: Name(pog.Message)) -> pog.Config {

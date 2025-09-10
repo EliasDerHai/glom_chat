@@ -32,8 +32,6 @@ pub fn handle_ws_request(
           )
           as "could not extract session from ws-handshake"
 
-        echo { "session_user = " <> uuid.to_string(session.user_id) }
-
         // Send a message to the registry to add this connection
         actor.send(registry, Register(session.user_id, conn))
 

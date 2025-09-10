@@ -19,16 +19,14 @@ pub fn main() {
 
   // db migration and pool setup
   migration.migrate_db()
-  let #(_supervisor, db) = pool.new_supervisor_with_pool()
-
-  // Start the registry actor and get its Pid
-  let registry_subject = registry.start()
+  let db = pool.init()
+  let socket_registry = registry.init()
 
   let assert Ok(_) =
     fn(req: MistRequest) {
       case request.path_segments(req) {
         ["ws"] ->
-          websocket.handle_ws_request(db, registry_subject, secret_key)(req)
+          websocket.handle_ws_request(db, socket_registry, secret_key)(req)
         _ -> http_router.handle_http_request(db, secret_key)(req)
       }
     }

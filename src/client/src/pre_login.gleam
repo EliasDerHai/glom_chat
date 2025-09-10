@@ -173,7 +173,6 @@ pub fn update(
         SignupUsername -> {
           update_signup(fn(r) {
             let field = form.set_value(r.username, value)
-            echo field
             SignupFormData(..r, username: field)
           })
         }

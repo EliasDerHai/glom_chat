@@ -11,6 +11,9 @@ import gleam/result
 import wisp.{type Response}
 import youid/uuid
 
+// TODO: 
+// remove workaround once websockets are implemented in wisp
+// see: https://github.com/gleam-wisp/wisp/issues/10
 pub fn get_session_from_mist_req(
   req: MistRequest,
   db: DbPool,

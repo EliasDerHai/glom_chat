@@ -6,4 +6,5 @@ node_modules/
 dist/
 .DS_Store
 src/client/priv/static/*
+.claude
 CLAUDE.md
