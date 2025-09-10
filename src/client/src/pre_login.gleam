@@ -126,8 +126,6 @@ pub fn update(
   }
 
   let model = case msg {
-    // FIXME: after switching mode (== toggle login/signup) 
-    // UI state is out of sync with model
     UserSetPreLoginMode(mode) -> PreLoginState(..model, mode: mode)
 
     ShowToast(_) -> model
@@ -378,7 +376,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "text",
         "username",
         "your_username",
-        state.login_form_data.username |> get_error_text,
+        state.login_form_data.username,
       ),
       html_input(
         mode,
@@ -387,7 +385,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "password",
         "password",
         "••••••••",
-        state.login_form_data.password |> get_error_text,
+        state.login_form_data.password,
       ),
     ]
     Signup -> [
@@ -398,7 +396,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "text",
         "username",
         "your_username",
-        state.signup_form_data.username |> get_error_text,
+        state.signup_form_data.username,
       ),
       html_input(
         mode,
@@ -407,7 +405,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "email",
         "email",
         "you@example.com",
-        state.signup_form_data.email |> get_error_text,
+        state.signup_form_data.email,
       ),
       html_input(
         mode,
@@ -416,7 +414,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "password",
         "password",
         "••••••••",
-        state.signup_form_data.password |> get_error_text,
+        state.signup_form_data.password,
       ),
       html_input(
         mode,
@@ -425,7 +423,7 @@ pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
         "password",
         "password_confirm",
         "••••••••",
-        state.signup_form_data.password_confirm |> get_error_text,
+        state.signup_form_data.password_confirm,
       ),
     ]
   }
@@ -503,12 +501,12 @@ pub fn get_error_text(field: FormField(CustomError)) -> option.Option(String) {
 
 pub fn html_input(
   mode: PreLoginMode,
-  field: PreLoginFormProperty,
+  property: PreLoginFormProperty,
   label: String,
   type_: String,
   name: String,
   placeholder: String,
-  error: option.Option(String),
+  field: DefaultFormField,
 ) -> Element(PreLoginMsg) {
   let key =
     case mode {
@@ -516,6 +514,9 @@ pub fn html_input(
       Signup -> "signup_"
     }
     <> name
+
+  let error = field |> get_error_text
+  let value = field.value |> form.get_form_field_value_as_string
 
   let error_element = case error {
     option.None -> []
@@ -552,8 +553,11 @@ pub fn html_input(
             attribute.type_(type_),
             attribute.name(name),
             attribute.placeholder(placeholder),
-            event.on_change(fn(value: String) { UserChangeForm(field, value) }),
-            event.on_blur(UserBlurForm(field)),
+            attribute.value(value),
+            event.on_change(fn(value: String) {
+              UserChangeForm(property, value)
+            }),
+            event.on_blur(UserBlurForm(property)),
           ]),
           ..error_element
         ],
