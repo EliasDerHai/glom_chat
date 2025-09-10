@@ -1,5 +1,4 @@
 import endpoints
-import form.{type FormField}
 import gleam/bool
 import gleam/http
 import gleam/http/request
@@ -15,7 +14,8 @@ import lustre/element/keyed
 import lustre/event
 import rsvp
 import shared_user.{type UserDto, CreateUserDto}
-import toast.{type Toast}
+import util/form.{type FormField}
+import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {

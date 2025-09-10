@@ -1,7 +1,7 @@
-import form
 import gleam/option
 import gleeunit/should
 import pre_login.{Login, Signup, UserSetPreLoginMode}
+import util/form
 
 pub fn update_toggle_mode_test() {
   let m0 = pre_login.init()

@@ -1,13 +1,15 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import gleam/io
 import lustre
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
+import lustre_websocket as ws
 import pre_login.{type PreLoginMsg}
 import shared_user
-import toast.{type Toast}
 import util/time_util
+import util/toast.{type Toast}
 
 // MAIN ------------------------------------------------------------------------
 
@@ -51,6 +53,7 @@ pub type Msg {
   PreLoginMsg(PreLoginMsg)
   ShowToast(Toast)
   RemoveToast(Int)
+  WsWrapper(ws.WebSocketEvent)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -86,10 +89,17 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         pre_login.update(pre_login_model, msg)
 
       case msg {
-        pre_login.ApiRespondLoginRequest(Ok(user_dto)) -> #(
-          Model(LoggedIn(user_dto), model.global_state),
-          effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
-        )
+        pre_login.ApiRespondLoginRequest(Ok(user_dto)) -> {
+          let ws_connect_effect = ws.init("ws://localhost:8000/ws", WsWrapper)
+
+          #(
+            Model(LoggedIn(user_dto), model.global_state),
+            effect.batch([
+              effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
+              ws_connect_effect,
+            ]),
+          )
+        }
 
         _ -> #(
           Model(PreLogin(pre_login_model), model.global_state),
@@ -98,9 +108,42 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       }
     }
 
-    LoggedIn(model), PreLoginMsg(msg) -> {
-      echo #(model, msg)
-      panic as "Unexpected combination"
+    LoggedIn(user_dto), PreLoginMsg(msg) -> {
+      echo #(user_dto, msg)
+      panic as "Unexpected combination: PreLoginMsg while LoggedIn"
+    }
+
+    // ### WEBSOCKET ###
+    _, WsWrapper(socket_event) -> {
+      case socket_event {
+        ws.InvalidUrl -> panic as "invalid socket url"
+        ws.OnOpen(_) -> {
+          io.println("WebSocket connected successfully")
+          #(model, effect.none())
+        }
+        ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
+        ws.OnTextMessage(message) -> {
+          io.println("Received WebSocket message: " <> message)
+          // TODO: Parse and handle different message types
+          #(model, effect.none())
+        }
+        ws.OnClose(close_reason) -> {
+          echo #("WebSocket error", close_reason)
+          let error_toast =
+            toast.create_error_toast("Socket connection lost - reconnecting...")
+          let new_toasts =
+            toast.add_toast(model.global_state.toasts, error_toast)
+          let new_global_state = GlobalState(new_toasts)
+          let timeout_effect =
+            effect.from(fn(dispatch) {
+              time_util.set_timeout(
+                fn() { dispatch(RemoveToast(error_toast.id)) },
+                error_toast.duration,
+              )
+            })
+          #(Model(model.app_state, new_global_state), timeout_effect)
+        }
+      }
     }
   }
 }

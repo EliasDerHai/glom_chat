@@ -10,6 +10,7 @@ gleam_time = ">= 1.4.0 and < 2.0.0"
 lustre = ">= 5.3.4 and < 6.0.0"
 rsvp = ">= 1.0.1 and < 2.0.0"
 shared = { path = "../shared" }
+lustre_websocket = ">= 0.9.0 and < 1.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
