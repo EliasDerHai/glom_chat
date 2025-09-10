@@ -1,12 +1,11 @@
-// IMPORTS ---------------------------------------------------------------------
-
 import endpoints
 import gleam/io
+import gleam/option.{type Option, None}
 import lustre
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
-import lustre_websocket as ws
+import lustre_websocket.{type WebSocket} as ws
 import pre_login.{type PreLoginMsg}
 import shared_user
 import util/time_util
@@ -17,8 +16,6 @@ import util/toast.{type Toast}
 pub fn main() {
   let app = lustre.application(init, update, view)
   let assert Ok(_) = lustre.start(app, "#app", Nil)
-
-  Nil
 }
 
 // MODEL -----------------------------------------------------------------------
@@ -31,7 +28,7 @@ pub type Model {
 /// state of the app/route with business logic
 pub type AppState {
   PreLogin(pre_login.PreLoginState)
-  LoggedIn(shared_user.UserDto)
+  LoggedIn(LoginState)
 }
 
 /// separate global state incl.
@@ -40,6 +37,10 @@ pub type AppState {
 /// shouldn't relate to business logic
 pub type GlobalState {
   GlobalState(toasts: List(Toast))
+}
+
+pub type LoginState {
+  LoginState(user: shared_user.UserDto, web_socket: Option(WebSocket))
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
@@ -74,7 +75,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           let ws_connect_effect = ws.init(endpoints.socket_address(), WsWrapper)
 
           #(
-            Model(LoggedIn(user_dto), model.global_state),
+            Model(LoggedIn(LoginState(user_dto, None)), model.global_state),
             effect.batch([
               effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
               ws_connect_effect,
@@ -110,9 +111,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         }
         ws.OnClose(close_reason) -> {
           echo #("WebSocket error", close_reason)
-          let error_toast =
-            toast.create_error_toast("Socket connection lost - reconnecting...")
-          show_toast(model, error_toast)
+          #(model, effect.none())
         }
       }
     }
@@ -141,17 +140,28 @@ fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
 // VIEW ------------------------------------------------------------------------
 
 fn view(model: Model) -> Element(Msg) {
+  // deriving socket-conn-lost info directly from model
+  let toasts = case model.app_state {
+    LoggedIn(LoginState(_, None)) ->
+      toast.add_toast(
+        model.global_state.toasts,
+        toast.create_error_toast("Socket connection lost - reconnecting..."),
+      )
+    _ -> model.global_state.toasts
+  }
+
   html.div([], [
     // Main content based on app state
     case model.app_state {
-      LoggedIn(shared_user.UserDto(_id, username, _email, _email_verified)) ->
+      LoggedIn(LoginState(shared_user.UserDto(username, ..), ..)) ->
         html.div([], [html.text("Welcome " <> username <> "!")])
       PreLogin(state) ->
         element.map(pre_login.view_login_signup(state), fn(pre_msg) {
           PreLoginMsg(pre_msg)
         })
     },
+
     // Toast notifications overlay
-    toast.view_toasts(model.global_state.toasts),
+    toast.view_toasts(toasts),
   ])
 }
