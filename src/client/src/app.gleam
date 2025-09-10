@@ -1,12 +1,14 @@
 import endpoints
 import gleam/io
+import gleam/list
 import gleam/option.{type Option, None}
+import gleam/string
 import lustre
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre_websocket.{type WebSocket} as ws
-import pre_login.{type PreLoginMsg}
+import pre_login
 import shared_user
 import util/time_util
 import util/toast.{type Toast}
@@ -15,6 +17,8 @@ import util/toast.{type Toast}
 
 pub fn main() {
   let app = lustre.application(init, update, view)
+
+  let assert Ok(_) = pre_login.register()
   let assert Ok(_) = lustre.start(app, "#app", Nil)
 }
 
@@ -25,9 +29,9 @@ pub type Model {
   Model(app_state: AppState, global_state: GlobalState)
 }
 
-/// state of the app/route with business logic
+/// state of the app with business logic
 pub type AppState {
-  PreLogin(pre_login.PreLoginState)
+  PreLogin
   LoggedIn(LoginState)
 }
 
@@ -44,7 +48,7 @@ pub type LoginState {
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
-  let model = Model(PreLogin(pre_login.init()), GlobalState([]))
+  let model = Model(PreLogin, GlobalState([]))
 
   #(model, effect.none())
 }
@@ -52,7 +56,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
 // UPDATE ----------------------------------------------------------------------
 
 pub type Msg {
-  PreLoginMsg(PreLoginMsg)
+  LoginSuccess(shared_user.UserDto)
   ShowToast(Toast)
   RemoveToast(Int)
   WsWrapper(ws.WebSocketEvent)
@@ -61,47 +65,40 @@ pub type Msg {
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case model.app_state, msg {
     // ### TOASTS ###
-    _, PreLoginMsg(pre_login.ShowToast(toast_msg)) | _, ShowToast(toast_msg) ->
-      show_toast(model, toast_msg)
+    _, ShowToast(toast_msg) -> show_toast(model, toast_msg)
     _, RemoveToast(toast_id) -> remove_toast(model, toast_id)
 
-    // ### APP ###
-    PreLogin(pre_login_model), PreLoginMsg(msg) -> {
-      let #(pre_login_model, pre_login_effect) =
-        pre_login.update(pre_login_model, msg)
-
-      case msg {
-        pre_login.ApiRespondLoginRequest(Ok(user_dto)) -> {
-          let ws_connect_effect = ws.init(endpoints.socket_address(), WsWrapper)
-
-          #(
-            Model(LoggedIn(LoginState(user_dto, None)), model.global_state),
-            effect.batch([
-              effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
-              ws_connect_effect,
-            ]),
-          )
-        }
-
-        _ -> #(
-          Model(PreLogin(pre_login_model), model.global_state),
-          effect.map(pre_login_effect, fn(msg) { PreLoginMsg(msg) }),
-        )
-      }
+    // ### LOGIN SUCCESS ###
+    PreLogin, LoginSuccess(user_dto) -> {
+      let ws_connect_effect = ws.init(endpoints.socket_address(), WsWrapper)
+      #(
+        Model(LoggedIn(LoginState(user_dto, None)), model.global_state),
+        ws_connect_effect,
+      )
     }
 
-    LoggedIn(user_dto), PreLoginMsg(msg) -> {
-      echo #(user_dto, msg)
-      panic as "Unexpected combination: PreLoginMsg while LoggedIn"
+    LoggedIn(_), LoginSuccess(_) -> {
+      // User already logged in, ignore duplicate login
+      #(model, effect.none())
     }
 
     // ### WEBSOCKET ###
     _, WsWrapper(socket_event) -> {
       case socket_event {
         ws.InvalidUrl -> panic as "invalid socket url"
-        ws.OnOpen(_) -> {
+        ws.OnOpen(socket) -> {
           io.println("WebSocket connected successfully")
-          #(model, effect.none())
+          case model.app_state {
+            LoggedIn(login_state) -> {
+              let updated_login_state =
+                LoginState(..login_state, web_socket: option.Some(socket))
+              #(
+                Model(LoggedIn(updated_login_state), model.global_state),
+                effect.none(),
+              )
+            }
+            _ -> #(model, effect.none())
+          }
         }
         ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
         ws.OnTextMessage(message) -> {
@@ -110,8 +107,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           #(model, effect.none())
         }
         ws.OnClose(close_reason) -> {
-          echo #("WebSocket error", close_reason)
-          #(model, effect.none())
+          io.println("WebSocket closed: " <> string.inspect(close_reason))
+          case model.app_state {
+            LoggedIn(login_state) -> {
+              let updated_login_state =
+                LoginState(..login_state, web_socket: option.None)
+              #(
+                Model(LoggedIn(updated_login_state), model.global_state),
+                effect.none(),
+              )
+            }
+            _ -> #(model, effect.none())
+          }
         }
       }
     }
@@ -147,18 +154,23 @@ fn view(model: Model) -> Element(Msg) {
         model.global_state.toasts,
         toast.create_error_toast("Socket connection lost - reconnecting..."),
       )
-    _ -> model.global_state.toasts
+    _ ->
+      list.filter(model.global_state.toasts, fn(toast_msg) {
+        !string.starts_with(toast_msg.content, "Socket connection lost")
+      })
   }
 
   html.div([], [
     // Main content based on app state
     case model.app_state {
-      LoggedIn(LoginState(shared_user.UserDto(username, ..), ..)) ->
+      LoggedIn(LoginState(shared_user.UserDto(_, username, ..), ..)) ->
         html.div([], [html.text("Welcome " <> username <> "!")])
-      PreLogin(state) ->
-        element.map(pre_login.view_login_signup(state), fn(pre_msg) {
-          PreLoginMsg(pre_msg)
-        })
+
+      PreLogin ->
+        pre_login.element([
+          pre_login.on_login_success(LoginSuccess),
+          pre_login.on_show_toast(ShowToast),
+        ])
     },
 
     // Toast notifications overlay

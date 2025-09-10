@@ -1,3 +1,5 @@
+import gleam/dynamic/decode
+import gleam/json
 import gleam/list
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp
@@ -5,6 +7,8 @@ import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
 import util/time_util
+
+// TYPES -----------------------------------------------------------------------
 
 pub type Toast {
   Toast(id: Int, content: String, toast_style: ToastStyle, duration: Duration)
@@ -15,6 +19,54 @@ pub type ToastStyle {
   Warning
   Failure
 }
+
+// ENCODING/DECODING -----------------------------------------------------------
+
+pub fn encode_toast(toast: Toast) -> json.Json {
+  json.object([
+    #("id", json.int(toast.id)),
+    #("content", json.string(toast.content)),
+    #("toast_style", encode_toast_style(toast.toast_style)),
+    #("duration", json.int(time_util.duration_to_millis(toast.duration))),
+  ])
+}
+
+pub fn decode_toast() -> decode.Decoder(Toast) {
+  use id <- decode.field("id", decode.int)
+  use content <- decode.field("content", decode.string)
+  use toast_style <- decode.field("toast_style", decode_toast_style())
+  use duration <- decode.field("duration", decode.int)
+
+  decode.success(Toast(
+    id,
+    content,
+    toast_style,
+    duration.milliseconds(duration),
+  ))
+}
+
+pub fn encode_toast_style(style: ToastStyle) -> json.Json {
+  case style {
+    Failure -> "failure"
+    Info -> "info"
+    Warning -> "warning"
+  }
+  |> json.string
+}
+
+pub fn decode_toast_style() -> decode.Decoder(ToastStyle) {
+  decode.string
+  |> decode.map(fn(style) {
+    case style {
+      "failure" -> Failure
+      "info" -> Info
+      "warning" -> Warning
+      other -> panic as { "did not expect ToastStyle '" <> other <> "'" }
+    }
+  })
+}
+
+// INIT -----------------------------------------------------------
 
 pub fn create_info_toast(content: String) -> Toast {
   timestamp.to_unix_seconds_and_nanoseconds(timestamp.system_time())
@@ -36,6 +88,8 @@ pub fn create_error_toast(content: String) -> Toast {
   )
 }
 
+// UPDATE -----------------------------------------------------------
+
 pub fn add_toast(toasts: List(Toast), toast: Toast) -> List(Toast) {
   [toast, ..toasts]
 }
@@ -43,6 +97,8 @@ pub fn add_toast(toasts: List(Toast), toast: Toast) -> List(Toast) {
 pub fn remove_toast_by_id(toasts: List(Toast), toast_id: Int) -> List(Toast) {
   list.filter(toasts, fn(toast) { toast.id != toast_id })
 }
+
+// VIEW -----------------------------------------------------------
 
 pub fn view_toasts(toasts: List(Toast)) -> Element(msg) {
   html.div(

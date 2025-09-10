@@ -1,12 +1,14 @@
 import endpoints
 import gleam/bool
+import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option
-import lustre/attribute
+import lustre
+import lustre/attribute.{type Attribute}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
@@ -15,7 +17,30 @@ import lustre/event
 import rsvp
 import shared_user.{type UserDto, CreateUserDto}
 import util/form.{type FormField}
-import util/toast.{type Toast}
+import util/toast
+
+// COMPONENT API ---------------------------------------------------------------
+
+pub fn register() -> Result(Nil, lustre.Error) {
+  let component = lustre.component(init, update, view, [])
+  lustre.register(component, "pre-login")
+}
+
+pub fn element(attributes: List(Attribute(msg))) -> Element(msg) {
+  element.element("pre-login", attributes, [])
+}
+
+pub fn on_login_success(handler: fn(UserDto) -> msg) -> Attribute(msg) {
+  event.on("login-success", {
+    decode.at(["detail"], shared_user.decode_user_dto()) |> decode.map(handler)
+  })
+}
+
+pub fn on_show_toast(handler: fn(toast.Toast) -> msg) -> Attribute(msg) {
+  event.on("show-toast", {
+    decode.at(["detail"], toast.decode_toast()) |> decode.map(handler)
+  })
+}
 
 // MODEL -----------------------------------------------------------------------
 pub type PreLoginState {
@@ -51,25 +76,28 @@ pub type PreLoginMode {
   Signup
 }
 
-pub fn init() {
+pub fn init(_) -> #(PreLoginState, Effect(PreLoginMsg)) {
   let default_validators = [
     form.validator_nonempty(),
     form.validator_min_length(5),
   ]
 
-  PreLoginState(
-    mode: Login,
-    login_form_data: LoginDetails(
-      username: form.string_form_field(default_validators),
-      password: form.string_form_field(default_validators),
-    ),
-    signup_form_data: SignupFormData(
-      username: form.string_form_field(default_validators),
-      email: form.string_form_field(default_validators),
-      password: form.string_form_field(default_validators),
-      password_confirm: form.string_form_field([form.validator_nonempty()]),
-    ),
-  )
+  let model =
+    PreLoginState(
+      mode: Login,
+      login_form_data: LoginDetails(
+        username: form.string_form_field(default_validators),
+        password: form.string_form_field(default_validators),
+      ),
+      signup_form_data: SignupFormData(
+        username: form.string_form_field(default_validators),
+        email: form.string_form_field(default_validators),
+        password: form.string_form_field(default_validators),
+        password_confirm: form.string_form_field([form.validator_nonempty()]),
+      ),
+    )
+
+  #(model, effect.none())
 }
 
 // UPDATE -----------------------------------------------------------------------
@@ -80,7 +108,6 @@ pub type PreLoginMsg {
   UserBlurForm(PreLoginFormProperty)
   ApiRespondSignupRequest(Result(UserDto, rsvp.Error))
   ApiRespondLoginRequest(Result(UserDto, rsvp.Error))
-  ShowToast(Toast)
 }
 
 pub type PreLoginFormProperty {
@@ -127,8 +154,6 @@ pub fn update(
 
   let model = case msg {
     UserSetPreLoginMode(mode) -> PreLoginState(..model, mode: mode)
-
-    ShowToast(_) -> model
 
     UserChangeForm(field, value) -> {
       let value = form.StringField(value)
@@ -220,49 +245,52 @@ pub fn update(
       }
 
     ApiRespondSignupRequest(result) ->
-      fn(dispatch) {
-        let toast = case result {
-          Ok(signup_response) ->
-            { "Signup successful for user: " <> signup_response.username }
-            |> toast.create_info_toast
-
-          Error(e) ->
-            case e {
-              rsvp.HttpError(r) if r.body == "username-taken" ->
-                "Signup failed:\nUsername is already taken"
-              rsvp.HttpError(r) if r.body == "email-taken" ->
-                "Signup failed:\nEmail is already in use"
-              _ -> "Signup failed"
-            }
-            |> toast.create_error_toast
+      case result {
+        Ok(signup_response) -> {
+          let toast_msg =
+            toast.create_info_toast(
+              "Signup successful for user: " <> signup_response.username,
+            )
+          event.emit("show-toast", toast.encode_toast(toast_msg))
         }
-
-        toast
-        |> ShowToast
-        |> dispatch
+        Error(e) -> {
+          let error_message = case e {
+            rsvp.HttpError(r) if r.body == "username-taken" ->
+              "Signup failed:\nUsername is already taken"
+            rsvp.HttpError(r) if r.body == "email-taken" ->
+              "Signup failed:\nEmail is already in use"
+            _ -> "Signup failed"
+          }
+          let toast_msg = toast.create_error_toast(error_message)
+          event.emit("show-toast", toast.encode_toast(toast_msg))
+        }
       }
-      |> effect.from
 
-    ApiRespondLoginRequest(Error(e)) ->
-      fn(dispatch) {
-        let toast =
-          case e {
+    ApiRespondLoginRequest(result) ->
+      case result {
+        Ok(user_dto) ->
+          event.emit("login-success", shared_user.to_json(user_dto))
+        Error(e) -> {
+          let error_message = case e {
             rsvp.HttpError(r) if r.status == 401 ->
               "Login failed:\nWrong username/password"
             _ -> "Login failed:\nUnexpected Error"
           }
-          |> toast.create_error_toast
-
-        toast
-        |> ShowToast
-        |> dispatch
+          let toast_msg = toast.create_error_toast(error_message)
+          event.emit("show-toast", toast.encode_toast(toast_msg))
+        }
       }
-      |> effect.from
 
     _ -> effect.none()
   }
 
   #(model, effect)
+}
+
+// VIEW ------------------------------------------------------------------------
+
+fn view(model: PreLoginState) -> Element(PreLoginMsg) {
+  view_login_signup(model)
 }
 
 fn send_signup_req(
