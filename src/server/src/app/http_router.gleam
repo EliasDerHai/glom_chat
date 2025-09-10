@@ -3,15 +3,12 @@ import app/domain/session
 import app/domain/user
 import app/middleware
 import app/persist/pool.{type DbPool}
+import app/util/mist_request.{type MistRequest}
 import gleam/http.{Get, Post}
-import gleam/http/request
 import gleam/http/response
-import mist.{type Connection}
+import mist
 import wisp.{type Response}
 import wisp/wisp_mist
-
-pub type MistRequest =
-  request.Request(Connection)
 
 pub fn handle_http_request(
   db: DbPool,
@@ -51,7 +48,6 @@ fn validate_and_handle_requests(req, db) {
   use req <- middleware.validation_middleware(req, db)
   case wisp.path_segments(req) {
     ["auth", "logout"] -> session.logout(req, db)
-    ["auth", "me"] -> session.me(req, db)
     ["users", id] -> user.user(req, db, id)
 
     _ -> wisp.not_found()

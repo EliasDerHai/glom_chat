@@ -1,6 +1,6 @@
 import app/auth
-import app/domain/session
 import app/persist/pool.{type DbPool}
+import app/util/cookie
 import gleam/http.{Get}
 import gleam/http/request
 import gleam/order
@@ -34,7 +34,7 @@ pub fn validation_middleware(
   db: DbPool,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
-  case session.get_session_from_wisp_req(req, db) {
+  case cookie.get_session_from_wisp_req(req, db) {
     Error(response) -> response
     Ok(session_entity) -> {
       case

@@ -1,19 +1,14 @@
-import app/domain/session
-import app/http_router
 import app/persist/pool.{type DbPool}
 import app/registry.{type RegistryMessage, Register, Unregister}
+import app/util/cookie
+import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
 import gleam/erlang/process
-import gleam/http/request
-import gleam/http/response
 import gleam/io
 import gleam/option
 import gleam/otp/actor
-import gleam/result
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
-import wisp
-import wisp/wisp_mist
 import youid/uuid.{type Uuid}
 
 pub type WsState {
@@ -25,31 +20,26 @@ pub fn handle_ws_request(
   registry: process.Subject(RegistryMessage),
   secret_key: String,
 ) {
-  fn(mist_req: http_router.MistRequest) {
+  fn(mist_req: MistRequest) {
     mist.websocket(
       request: mist_req,
       on_init: fn(conn) {
-        case
-          {
-            use session <- result.try(session.get_session_from_mist_req(
-              mist_req,
-              db,
-              bit_array.from_string(secret_key),
-            ))
+        let assert Ok(session) =
+          cookie.get_session_from_mist_req(
+            mist_req,
+            db,
+            bit_array.from_string(secret_key),
+          )
+          as "could not extract session from ws-handshake"
 
-            echo { "session_user = " <> uuid.to_string(session.user_id) }
+        echo { "session_user = " <> uuid.to_string(session.user_id) }
 
-            // Send a message to the registry to add this connection
-            actor.send(registry, Register(session.user_id, conn))
+        // Send a message to the registry to add this connection
+        actor.send(registry, Register(session.user_id, conn))
 
-            // Store the user_id in this connection's state
-            let state = WsState(user_id: session.user_id)
-            #(state, option.None) |> Ok
-          }
-        {
-          Error(_) -> todo
-          Ok(s) -> s
-        }
+        // Store the user_id in this connection's state
+        let state = WsState(user_id: session.user_id)
+        #(state, option.None)
       },
       on_close: fn(state) {
         // On close, send a message to unregister this user

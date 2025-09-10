@@ -5,10 +5,7 @@ import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic
 import gleam/dynamic/decode
-import gleam/float
 import gleam/http.{Post}
-import gleam/http/cookie
-import gleam/http/request
 import gleam/io
 import gleam/json
 import gleam/list
@@ -16,7 +13,6 @@ import gleam/option.{type Option}
 import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
-import mist.{type Connection}
 import pog
 import shared_user
 import wisp.{type Request, type Response}
@@ -82,7 +78,7 @@ fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
   Ok(SessionEntity(session_id, user_id, expires_at, csrf_secret))
 }
 
-fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
+pub fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
   use query_result <- result.try(
     db
     |> pool.conn()
@@ -200,102 +196,6 @@ pub fn logout(req: Request, db: DbPool) -> Response {
   }
 }
 
-// ################################################################################
-// Helper Functions
-// ################################################################################
-pub type MistRequest =
-  request.Request(Connection)
-
-pub fn get_session_from_mist_req(
-  req: MistRequest,
-  db: DbPool,
-  secret: BitArray,
-) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    get_cookie_from_header(req.headers, "session_id", wisp.Signed, secret)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie")
-      wisp.response(401)
-    }),
-  )
-
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID")
-      wisp.response(401)
-    }),
-  )
-
-  use session <- result.try(
-    get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(session)
-}
-
-fn get_cookie_from_header(
-  headers: List(http.Header),
-  cookie_name: String,
-  security: wisp.Security,
-  secret: BitArray,
-) -> Result(String, Nil) {
-  use value <- result.try(
-    headers
-    |> list.filter_map(fn(header) {
-      let #(name, value) = header
-      case name {
-        "cookie" -> Ok(cookie.parse(value))
-        _ -> Error(Nil)
-      }
-    })
-    |> list.flatten()
-    |> list.key_find(cookie_name),
-  )
-
-  use value <- result.try(case security {
-    wisp.PlainText -> bit_array.base64_decode(value)
-    wisp.Signed -> crypto.verify_signed_message(value, secret)
-  })
-
-  value |> bit_array.to_string
-}
-
-pub fn get_session_from_wisp_req(
-  req: wisp.Request,
-  db: DbPool,
-) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    wisp.get_cookie(req, "session_id", wisp.Signed)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie")
-      wisp.response(401)
-    }),
-  )
-
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID")
-      wisp.response(401)
-    }),
-  )
-
-  use session <- result.try(
-    get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(session)
-}
-
 fn verify_user_credentials_and_create_session(
   db: DbPool,
   json: dynamic.Dynamic,
@@ -345,28 +245,4 @@ fn verify_user_credentials_and_create_session(
   )
 
   Ok(session)
-}
-
-pub fn me(req: Request, db: DbPool) -> Response {
-  use <- wisp.require_method(req, http.Get)
-
-  case get_session_from_wisp_req(req, db) {
-    Ok(session) -> {
-      wisp.ok()
-      |> wisp.json_body(
-        json.object([
-          #("authenticated", json.bool(True)),
-          #("user_id", uuid.to_string(session.user_id) |> json.string()),
-          #("session_id", uuid.to_string(session.id) |> json.string()),
-          #(
-            "expires_at",
-            float.round(timestamp.to_unix_seconds(session.expires_at) *. 1000.0)
-              |> json.int(),
-          ),
-        ])
-        |> json.to_string,
-      )
-    }
-    Error(response) -> response
-  }
 }
