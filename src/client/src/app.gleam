@@ -68,58 +68,61 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     _, ShowToast(toast_msg) -> show_toast(model, toast_msg)
     _, RemoveToast(toast_id) -> remove_toast(model, toast_id)
 
-    // ### LOGIN SUCCESS ###
+    // ### LOGIN ###
     PreLogin, LoginSuccess(user_dto) -> {
-      let ws_connect_effect = ws.init(endpoints.socket_address(), WsWrapper)
       #(
         Model(LoggedIn(LoginState(user_dto, None)), model.global_state),
-        ws_connect_effect,
+        ws.init(endpoints.socket_address(), WsWrapper),
       )
     }
-
     LoggedIn(_), LoginSuccess(_) -> {
-      // User already logged in, ignore duplicate login
+      // already logged in, ignore duplicate login
       #(model, effect.none())
     }
 
     // ### WEBSOCKET ###
-    _, WsWrapper(socket_event) -> {
-      case socket_event {
-        ws.InvalidUrl -> panic as "invalid socket url"
-        ws.OnOpen(socket) -> {
-          io.println("WebSocket connected successfully")
-          case model.app_state {
-            LoggedIn(login_state) -> {
-              let updated_login_state =
-                LoginState(..login_state, web_socket: option.Some(socket))
-              #(
-                Model(LoggedIn(updated_login_state), model.global_state),
-                effect.none(),
-              )
-            }
-            _ -> #(model, effect.none())
-          }
+    _, WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
+  }
+}
+
+fn handle_socket_event(
+  model: Model,
+  socket_event: ws.WebSocketEvent,
+) -> #(Model, Effect(Msg)) {
+  case socket_event {
+    ws.InvalidUrl -> panic as "invalid socket url"
+    ws.OnOpen(socket) -> {
+      io.println("WebSocket connected successfully")
+      case model.app_state {
+        LoggedIn(login_state) -> {
+          let updated_login_state =
+            LoginState(..login_state, web_socket: option.Some(socket))
+          #(
+            Model(LoggedIn(updated_login_state), model.global_state),
+            effect.none(),
+          )
         }
-        ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
-        ws.OnTextMessage(message) -> {
-          io.println("Received WebSocket message: " <> message)
-          // TODO: Parse and handle different message types
-          #(model, effect.none())
+        _ -> #(model, effect.none())
+      }
+    }
+    ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
+    ws.OnTextMessage(message) -> {
+      io.println("Received WebSocket message: " <> message)
+      // TODO: Parse and handle different message types
+      #(model, effect.none())
+    }
+    ws.OnClose(close_reason) -> {
+      io.println("WebSocket closed: " <> string.inspect(close_reason))
+      case model.app_state {
+        LoggedIn(login_state) -> {
+          let updated_login_state =
+            LoginState(..login_state, web_socket: option.None)
+          #(
+            Model(LoggedIn(updated_login_state), model.global_state),
+            effect.none(),
+          )
         }
-        ws.OnClose(close_reason) -> {
-          io.println("WebSocket closed: " <> string.inspect(close_reason))
-          case model.app_state {
-            LoggedIn(login_state) -> {
-              let updated_login_state =
-                LoginState(..login_state, web_socket: option.None)
-              #(
-                Model(LoggedIn(updated_login_state), model.global_state),
-                effect.none(),
-              )
-            }
-            _ -> #(model, effect.none())
-          }
-        }
+        _ -> #(model, effect.none())
       }
     }
   }
