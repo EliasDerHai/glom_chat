@@ -1,5 +1,6 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import endpoints
 import gleam/io
 import lustre
 import lustre/effect.{type Effect}
@@ -59,29 +60,9 @@ pub type Msg {
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case model.app_state, msg {
     // ### TOASTS ###
-    _, PreLoginMsg(pre_login.ShowToast(toast_msg)) | _, ShowToast(toast_msg) -> {
-      let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
-      let new_global_state = GlobalState(new_toasts)
-      let remove_toast_after_timeout_effect =
-        effect.from(fn(dispatch) {
-          time_util.set_timeout(
-            fn() { dispatch(RemoveToast(toast_msg.id)) },
-            toast_msg.duration,
-          )
-        })
-
-      #(
-        Model(model.app_state, new_global_state),
-        remove_toast_after_timeout_effect,
-      )
-    }
-
-    _, RemoveToast(toast_id) -> {
-      let new_toasts =
-        toast.remove_toast_by_id(model.global_state.toasts, toast_id)
-      let new_global_state = GlobalState(new_toasts)
-      #(Model(model.app_state, new_global_state), effect.none())
-    }
+    _, PreLoginMsg(pre_login.ShowToast(toast_msg)) | _, ShowToast(toast_msg) ->
+      show_toast(model, toast_msg)
+    _, RemoveToast(toast_id) -> remove_toast(model, toast_id)
 
     // ### APP ###
     PreLogin(pre_login_model), PreLoginMsg(msg) -> {
@@ -90,7 +71,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
       case msg {
         pre_login.ApiRespondLoginRequest(Ok(user_dto)) -> {
-          let ws_connect_effect = ws.init("ws://localhost:8000/ws", WsWrapper)
+          let ws_connect_effect = ws.init(endpoints.socket_address(), WsWrapper)
 
           #(
             Model(LoggedIn(user_dto), model.global_state),
@@ -131,21 +112,30 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           echo #("WebSocket error", close_reason)
           let error_toast =
             toast.create_error_toast("Socket connection lost - reconnecting...")
-          let new_toasts =
-            toast.add_toast(model.global_state.toasts, error_toast)
-          let new_global_state = GlobalState(new_toasts)
-          let timeout_effect =
-            effect.from(fn(dispatch) {
-              time_util.set_timeout(
-                fn() { dispatch(RemoveToast(error_toast.id)) },
-                error_toast.duration,
-              )
-            })
-          #(Model(model.app_state, new_global_state), timeout_effect)
+          show_toast(model, error_toast)
         }
       }
     }
   }
+}
+
+fn show_toast(model: Model, toast_msg: Toast) -> #(Model, Effect(Msg)) {
+  let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
+  let new_global_state = GlobalState(new_toasts)
+  let timeout_effect =
+    effect.from(fn(dispatch) {
+      time_util.set_timeout(
+        fn() { dispatch(RemoveToast(toast_msg.id)) },
+        toast_msg.duration,
+      )
+    })
+  #(Model(model.app_state, new_global_state), timeout_effect)
+}
+
+fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
+  let new_toasts = toast.remove_toast_by_id(model.global_state.toasts, toast_id)
+  let new_global_state = GlobalState(new_toasts)
+  #(Model(model.app_state, new_global_state), effect.none())
 }
 
 // VIEW ------------------------------------------------------------------------

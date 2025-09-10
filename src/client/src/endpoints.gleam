@@ -10,3 +10,8 @@ pub fn users() {
 pub fn login() {
   api <> "auth/login"
 }
+
+// TODO: configurable? can we proxy this also?
+pub fn socket_address() {
+  "ws://localhost:8000/ws"
+}
