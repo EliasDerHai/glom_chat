@@ -5,9 +5,12 @@ import app/persist/pool
 import app/registry
 import app/websocket
 import gleam/erlang/process
-import gleam/http/request
-import mist
+import gleam/http/request.{type Request}
+import mist.{type Connection, type ResponseData}
 import wisp
+
+pub type MistRequest =
+  Request(Connection)
 
 pub fn main() {
   wisp.configure_logger()
@@ -24,7 +27,7 @@ pub fn main() {
   let registry_subject = registry.start()
 
   let assert Ok(_) =
-    fn(req) {
+    fn(req: Request(Connection)) {
       case request.path_segments(req) {
         ["ws"] -> websocket.handle_ws_request(req, db, registry_subject)(req)
         _ -> http_router.handle_http_request(db, secret_key)(req)

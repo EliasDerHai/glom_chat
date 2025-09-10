@@ -170,7 +170,7 @@ pub fn login(
             user_entity
             |> user.to_dto
             |> shared_user.to_json
-            |> json.to_string_tree,
+            |> json.to_string,
           )
         }
         Error(response) -> response
@@ -193,9 +193,9 @@ pub fn logout(req: Request, db: DbPool) -> Response {
           |> wisp.set_cookie(req, "session_id", "", wisp.Signed, 0)
           |> wisp.set_cookie(req, "csrf_token", "", wisp.PlainText, 0)
         }
-        Error(_) -> wisp.bad_request()
+        Error(_) -> wisp.bad_request("session_id is not a uuid")
       }
-    Error(_) -> wisp.bad_request()
+    Error(_) -> wisp.bad_request("no cookie with name 'session_id'")
   }
 }
 
@@ -261,7 +261,11 @@ fn verify_user_credentials_and_create_session(
 ) -> Result(SessionEntity, Response) {
   use dto <- result.try(
     decode.run(json, shared_user.decode_user_login_dto())
-    |> result.map_error(fn(_) { wisp.bad_request() }),
+    |> result.map_error(fn(_) {
+      wisp.bad_request(
+        "bad login dto - should be like `{\"username\": \"Joe\", \"password\": \"pa$$word\"}`",
+      )
+    }),
   )
 
   use query_result <- result.try(
@@ -319,7 +323,7 @@ pub fn me(req: Request, db: DbPool) -> Response {
               |> json.int(),
           ),
         ])
-        |> json.to_string_tree,
+        |> json.to_string,
       )
     }
     Error(response) -> response

@@ -4,8 +4,13 @@ import app/domain/user
 import app/middleware
 import app/persist/pool.{type DbPool}
 import gleam/http.{Get, Post}
-import wisp.{type Request, type Response}
+import gleam/http/request
+import mist.{type Connection}
+import wisp.{type Response}
 import wisp/wisp_mist
+
+pub type MistRequest =
+  request.Request(Connection)
 
 pub fn handle_http_request(db: DbPool, secret_key: String) {
   wisp_mist.handler(
@@ -14,7 +19,7 @@ pub fn handle_http_request(db: DbPool, secret_key: String) {
   )
 }
 
-fn handle_request(req: Request, db: DbPool) -> Response {
+fn handle_request(req: wisp.Request, db: DbPool) -> Response {
   use req <- middleware.default_middleware(req)
 
   case wisp.path_segments(req) {
@@ -49,7 +54,7 @@ fn validate_and_handle_requests(req, db) {
   }
 }
 
-fn simple_string_response(req: Request, response: String) -> Response {
+fn simple_string_response(req: wisp.Request, response: String) -> Response {
   use <- wisp.require_method(req, Get)
 
   wisp.string_body(wisp.ok(), response)

@@ -50,7 +50,7 @@ pub fn list_users(db: DbPool) -> Response {
     Ok(r) -> {
       list.map(r.rows, from_select_users_row)
       |> json.array(fn(el) { el |> to_dto |> shared_user.to_json })
-      |> json.to_string_tree
+      |> json.to_string
       |> wisp.json_response(200)
     }
   }
@@ -100,10 +100,10 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       entity
       |> to_dto
       |> shared_user.to_json
-      |> json.to_string_tree
+      |> json.to_string
       |> wisp.json_response(201)
 
-    Error(MalformedPayload) -> wisp.bad_request()
+    Error(MalformedPayload) -> wisp.bad_request("bad payload")
     Error(ServerError) -> wisp.internal_server_error()
     Error(EmailTaken) -> wisp.response(400) |> wisp.string_body("email-taken")
     Error(UsernameTaken) ->
@@ -116,7 +116,7 @@ pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
   {
     use id <- result.try(
       uuid.from_string(id_str)
-      |> result.map_error(fn(_) { wisp.bad_request() }),
+      |> result.map_error(fn(_) { wisp.bad_request("not a uuid") }),
     )
 
     case req.method {
@@ -152,7 +152,7 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
   user
   |> to_dto
   |> shared_user.to_json
-  |> json.to_string_tree
+  |> json.to_string
   |> wisp.json_response(201)
   |> Ok
 }
