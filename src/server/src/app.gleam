@@ -5,11 +5,8 @@ import app/persist/pool
 import app/websocket
 import gleam/erlang/process
 import gleam/http/request
-import gleam/io
-import gleam/option
 import mist
 import wisp
-import wisp/wisp_mist
 
 pub fn main() {
   wisp.configure_logger()
@@ -25,19 +22,8 @@ pub fn main() {
   let assert Ok(_) =
     fn(req) {
       case request.path_segments(req) {
-        // /ws upgrade to WebSocket
-        ["ws"] ->
-          mist.websocket(
-            request: req,
-            on_init: fn(_conn) { #(Nil, option.None) },
-            on_close: fn(_state) { io.println("bye!") },
-            handler: websocket.handle_ws_message,
-          )
-
-        _ ->
-          wisp_mist.handler(http_router.handle_request_with_db(db), secret_key)(
-            req,
-          )
+        ["ws"] -> websocket.handle_ws_request(db)(req)
+        _ -> http_router.handle_http_request(db, secret_key)(req)
       }
     }
     |> mist.new

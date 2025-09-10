@@ -5,9 +5,10 @@ import app/middleware
 import app/persist/pool.{type DbPool}
 import gleam/http.{Get, Post}
 import wisp.{type Request, type Response}
+import wisp/wisp_mist
 
-pub fn handle_request_with_db(db: DbPool) -> fn(Request) -> Response {
-  fn(req) { handle_request(req, db) }
+pub fn handle_http_request(db: DbPool, secret_key: String) {
+  wisp_mist.handler(fn(req) { handle_request(req, db) }, secret_key)
 }
 
 fn handle_request(req: Request, db: DbPool) -> Response {
