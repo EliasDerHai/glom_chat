@@ -9,9 +9,6 @@ import gleam/http/request.{type Request}
 import mist.{type Connection, type ResponseData}
 import wisp
 
-pub type MistRequest =
-  Request(Connection)
-
 pub fn main() {
   wisp.configure_logger()
 
@@ -27,9 +24,10 @@ pub fn main() {
   let registry_subject = registry.start()
 
   let assert Ok(_) =
-    fn(req: Request(Connection)) {
+    fn(req: http_router.MistRequest) {
       case request.path_segments(req) {
-        ["ws"] -> websocket.handle_ws_request(req, db, registry_subject)(req)
+        ["ws"] ->
+          websocket.handle_ws_request(db, registry_subject, secret_key)(req)
         _ -> http_router.handle_http_request(db, secret_key)(req)
       }
     }

@@ -1,8 +1,11 @@
 import app/domain/session
+import app/http_router
 import app/persist/pool.{type DbPool}
 import app/registry.{type RegistryMessage, Register, Unregister}
+import gleam/bit_array
 import gleam/erlang/process
 import gleam/http/request
+import gleam/http/response
 import gleam/io
 import gleam/option
 import gleam/otp/actor
@@ -10,6 +13,7 @@ import gleam/result
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
 import wisp
+import wisp/wisp_mist
 import youid/uuid.{type Uuid}
 
 pub type WsState {
@@ -17,34 +21,35 @@ pub type WsState {
 }
 
 pub fn handle_ws_request(
-  http_req,
   db: DbPool,
   registry: process.Subject(RegistryMessage),
+  secret_key: String,
 ) {
-  // use session <- session.get_session_from_cookie(req)
-  fn(req) {
+  fn(mist_req: http_router.MistRequest) {
     mist.websocket(
-      request: req,
+      request: mist_req,
       on_init: fn(conn) {
-        todo
-        //        case
-        //          {
-        //            use session <- result.try(session.get_session_from_cookie(
-        //              http_req,
-        //              db,
-        //            ))
-        //
-        //            // Send a message to the registry to add this connection
-        //            actor.send(registry, Register(session.user_id, conn))
-        //
-        //            // Store the user_id in this connection's state
-        //            let state = WsState(user_id: session.user_id)
-        //            #(state, option.None) |> Ok
-        //          }
-        //        {
-        //          Error(_) -> todo
-        //          Ok(s) -> s
-        //        }
+        case
+          {
+            use session <- result.try(session.get_session_from_mist_req(
+              mist_req,
+              db,
+              bit_array.from_string(secret_key),
+            ))
+
+            echo { "session_user = " <> uuid.to_string(session.user_id) }
+
+            // Send a message to the registry to add this connection
+            actor.send(registry, Register(session.user_id, conn))
+
+            // Store the user_id in this connection's state
+            let state = WsState(user_id: session.user_id)
+            #(state, option.None) |> Ok
+          }
+        {
+          Error(_) -> todo
+          Ok(s) -> s
+        }
       },
       on_close: fn(state) {
         // On close, send a message to unregister this user

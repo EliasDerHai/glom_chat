@@ -34,7 +34,7 @@ pub fn validation_middleware(
   db: DbPool,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
-  case session.get_session_from_cookie(req, db) {
+  case session.get_session_from_wisp_req(req, db) {
     Error(response) -> response
     Ok(session_entity) -> {
       case

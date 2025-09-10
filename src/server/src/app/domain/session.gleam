@@ -16,6 +16,7 @@ import gleam/option.{type Option}
 import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
+import mist.{type Connection}
 import pog
 import shared_user
 import wisp.{type Request, type Response}
@@ -202,29 +203,69 @@ pub fn logout(req: Request, db: DbPool) -> Response {
 // ################################################################################
 // Helper Functions
 // ################################################################################
+pub type MistRequest =
+  request.Request(Connection)
 
-//pub fn get_cookie_from_any_header(
-//  headers: List(http.Header),
-//  secret
-//) -> Result(String, Nil) {
-//  use value <- result.try(
-//    headers
-//    |> list.filter_map(fn(header) {
-//      let #(name, value) = header
-//      case name {
-//        "cookie" -> Ok(cookie.parse(value))
-//        _ -> Error(Nil)
-//      }
-//    })
-//    |> list.flatten()
-//    |> list.key_find("session_id"),
-//  )
-//
-//  use value <- result.try(crypto.verify_signed_message(value, secret))
-//  bit_array.to_string(value)
-//}
+pub fn get_session_from_mist_req(
+  req: MistRequest,
+  db: DbPool,
+  secret: BitArray,
+) -> Result(SessionEntity, Response) {
+  use session_id_str <- result.try(
+    get_cookie_from_header(req.headers, "session_id", wisp.Signed, secret)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session_id cookie")
+      wisp.response(401)
+    }),
+  )
 
-pub fn get_session_from_cookie(
+  use session_id <- result.try(
+    uuid.from_string(session_id_str)
+    |> result.map_error(fn(_) {
+      io.println("Failed to parse session_id UUID")
+      wisp.response(401)
+    }),
+  )
+
+  use session <- result.try(
+    get_session(db, session_id)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session from database")
+      wisp.response(401)
+    }),
+  )
+
+  Ok(session)
+}
+
+fn get_cookie_from_header(
+  headers: List(http.Header),
+  cookie_name: String,
+  security: wisp.Security,
+  secret: BitArray,
+) -> Result(String, Nil) {
+  use value <- result.try(
+    headers
+    |> list.filter_map(fn(header) {
+      let #(name, value) = header
+      case name {
+        "cookie" -> Ok(cookie.parse(value))
+        _ -> Error(Nil)
+      }
+    })
+    |> list.flatten()
+    |> list.key_find(cookie_name),
+  )
+
+  use value <- result.try(case security {
+    wisp.PlainText -> bit_array.base64_decode(value)
+    wisp.Signed -> crypto.verify_signed_message(value, secret)
+  })
+
+  value |> bit_array.to_string
+}
+
+pub fn get_session_from_wisp_req(
   req: wisp.Request,
   db: DbPool,
 ) -> Result(SessionEntity, Response) {
@@ -309,7 +350,7 @@ fn verify_user_credentials_and_create_session(
 pub fn me(req: Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, http.Get)
 
-  case get_session_from_cookie(req, db) {
+  case get_session_from_wisp_req(req, db) {
     Ok(session) -> {
       wisp.ok()
       |> wisp.json_body(

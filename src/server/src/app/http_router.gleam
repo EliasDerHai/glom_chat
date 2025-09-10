@@ -5,6 +5,7 @@ import app/middleware
 import app/persist/pool.{type DbPool}
 import gleam/http.{Get, Post}
 import gleam/http/request
+import gleam/http/response
 import mist.{type Connection}
 import wisp.{type Response}
 import wisp/wisp_mist
@@ -12,7 +13,10 @@ import wisp/wisp_mist
 pub type MistRequest =
   request.Request(Connection)
 
-pub fn handle_http_request(db: DbPool, secret_key: String) {
+pub fn handle_http_request(
+  db: DbPool,
+  secret_key: String,
+) -> fn(MistRequest) -> response.Response(mist.ResponseData) {
   wisp_mist.handler(
     fn(req: wisp.Request) { handle_request(req, db) },
     secret_key,
