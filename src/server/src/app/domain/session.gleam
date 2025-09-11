@@ -14,6 +14,7 @@ import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
 import pog
+import shared_session.{type SessionDto, SessionDto}
 import shared_user
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
@@ -29,6 +30,14 @@ pub type SessionEntity {
     user_id: Uuid,
     expires_at: timestamp.Timestamp,
     csrf_secret: String,
+  )
+}
+
+pub fn to_session_dto(entity: SessionEntity) -> SessionDto {
+  SessionDto(
+    entity.id |> uuid.to_string |> shared_session.SessionId,
+    entity.user_id |> uuid.to_string |> shared_user.UserId,
+    entity.expires_at,
   )
 }
 
@@ -245,4 +254,12 @@ fn verify_user_credentials_and_create_session(
   )
 
   Ok(session)
+}
+
+pub fn me(req: Request, _db: DbPool, session: SessionEntity) -> Response {
+  use <- wisp.require_method(req, http.Get)
+  let body =
+    session |> to_session_dto |> shared_session.to_json |> json.to_string
+
+  wisp.json_body(wisp.ok(), body)
 }
