@@ -4,12 +4,13 @@ import gleam/list
 import gleam/option.{type Option, None}
 import gleam/string
 import lustre
+import lustre/attribute.{class, placeholder}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre_websocket.{type WebSocket} as ws
 import pre_login
-import shared_user
+import shared_user.{UserDto}
 import util/time_util
 import util/toast.{type Toast}
 
@@ -166,8 +167,7 @@ fn view(model: Model) -> Element(Msg) {
   html.div([], [
     // Main content based on app state
     case model.app_state {
-      LoggedIn(LoginState(shared_user.UserDto(_, username, ..), ..)) ->
-        html.div([], [html.text("Welcome " <> username.v <> "!")])
+      LoggedIn(login_state) -> view_chat(login_state)
 
       PreLogin ->
         pre_login.element([
@@ -178,5 +178,69 @@ fn view(model: Model) -> Element(Msg) {
 
     // Toast notifications overlay
     toast.view_toasts(toasts),
+  ])
+}
+
+fn view_chat(model: LoginState) -> Element(Msg) {
+  let LoginState(UserDto(_, username, ..), ..) = model
+  html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
+    // Sidebar
+    html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
+      // Sidebar Header
+      html.div([class("p-4 border-b border-gray-200")], [
+        html.h2([class("text-xl font-bold text-blue-600")], [html.text("Chats")]),
+      ]),
+      // Search Input
+      html.div([class("p-4")], [
+        html.input([
+          class(
+            "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+          ),
+          placeholder("Search chats..."),
+        ]),
+      ]),
+      // Chat List
+      html.div([class("flex-1 overflow-y-auto")], [
+        // Placeholder for chat list items
+        html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
+          html.text("Chat with User A"),
+        ]),
+      ]),
+    ]),
+
+    // Main Content
+    html.div([class("w-2/3 flex flex-col")], [
+      // Header
+      html.header([class("p-4 border-b border-gray-200 bg-white shadow-sm")], [
+        html.h1([class("text-xl font-semibold")], [
+          html.text("Welcome " <> username.v <> "!"),
+        ]),
+      ]),
+
+      // Chat messages area
+      html.main([class("flex-1 p-4 overflow-y-auto")], [
+        html.p([], [html.text("Chat messages will appear here.")]),
+      ]),
+
+      // Message input area
+      html.footer([class("p-4 bg-white border-t border-gray-200")], [
+        html.div([class("flex")], [
+          html.input([
+            class(
+              "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+            ),
+            placeholder("Type your message..."),
+          ]),
+          html.button(
+            [
+              class(
+                "bg-blue-600 text-white font-semibold py-2 px-4 rounded-r-md transition-colors hover:bg-blue-700",
+              ),
+            ],
+            [html.text("Send")],
+          ),
+        ]),
+      ]),
+    ]),
   ])
 }

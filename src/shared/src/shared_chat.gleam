@@ -1,10 +1,10 @@
 import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
+import shared_user
 
 pub type ChatConversation {
   ChatConversation(
-    /// user_ids
-    participants: List(String),
+    participants: List(shared_user.UserId),
     messages: List(ChatMessage),
   )
 }
@@ -12,9 +12,9 @@ pub type ChatConversation {
 pub type ChatMessage {
   ChatMessage(
     /// user_id
-    sender: String,
+    sender: shared_user.UserId,
     /// username
-    receiver: String,
+    receiver: shared_user.Username,
     delivery: ChatMessageDelivery,
     /// utc when server received (sent) message
     sent_time: Option(Timestamp),
