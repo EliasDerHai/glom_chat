@@ -10,8 +10,8 @@ pub fn user_json_roundtrip_test() {
   // arrange 
   let input =
     UserDto(
-      "9c5b94b1-35ad-49bb-b118-8e8fc24abf80",
-      "John",
+      "9c5b94b1-35ad-49bb-b118-8e8fc24abf80" |> shared_user.UserId,
+      "John" |> shared_user.Username,
       "john.boy@gleamer.com",
       False,
     )

@@ -167,7 +167,7 @@ fn view(model: Model) -> Element(Msg) {
     // Main content based on app state
     case model.app_state {
       LoggedIn(LoginState(shared_user.UserDto(_, username, ..), ..)) ->
-        html.div([], [html.text("Welcome " <> username <> "!")])
+        html.div([], [html.text("Welcome " <> username.v <> "!")])
 
       PreLogin ->
         pre_login.element([

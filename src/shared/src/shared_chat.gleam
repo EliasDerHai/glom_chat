@@ -1,8 +1,9 @@
+import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 
 pub type ChatConversation {
   ChatConversation(
-    /// user_id
+    /// user_ids
     participants: List(String),
     messages: List(ChatMessage),
   )
@@ -12,13 +13,13 @@ pub type ChatMessage {
   ChatMessage(
     /// user_id
     sender: String,
-    /// user_ids
-    receiver: List(String),
+    /// username
+    receiver: String,
     delivery: ChatMessageDelivery,
     /// utc when server received (sent) message
-    sent_time: Timestamp,
+    sent_time: Option(Timestamp),
     /// `\n` is splitted to allow delimiter agnostic newlines
-    content: List(String),
+    text_content: List(String),
   )
 }
 

@@ -248,7 +248,7 @@ pub fn update(
         Ok(signup_response) -> {
           let toast_msg =
             toast.create_info_toast(
-              "Signup successful for user: " <> signup_response.username,
+              "Signup successful for user: " <> signup_response.username.v,
             )
           event.emit("show-toast", toast.encode_toast(toast_msg))
         }

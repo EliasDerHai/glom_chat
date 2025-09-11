@@ -1,10 +1,17 @@
 import gleam/dynamic/decode
 import gleam/json
 
-// ENTITY 
+pub type UserId {
+  /// Uuid on server
+  UserId(v: String)
+}
+
+pub type Username {
+  Username(v: String)
+}
 
 pub type UserDto {
-  UserDto(id: String, username: String, email: String, email_verified: Bool)
+  UserDto(id: UserId, username: Username, email: String, email_verified: Bool)
 }
 
 pub fn decode_user_dto() -> decode.Decoder(UserDto) {
@@ -12,7 +19,12 @@ pub fn decode_user_dto() -> decode.Decoder(UserDto) {
   use username <- decode.field("username", decode.string)
   use email <- decode.field("email", decode.string)
   use email_verified <- decode.field("email_verified", decode.bool)
-  decode.success(UserDto(id, username, email, email_verified))
+  decode.success(UserDto(
+    id |> UserId,
+    username |> Username,
+    email,
+    email_verified,
+  ))
 }
 
 /// {
@@ -23,8 +35,8 @@ pub fn decode_user_dto() -> decode.Decoder(UserDto) {
 /// }
 pub fn to_json(user: UserDto) -> json.Json {
   json.object([
-    #("id", json.string(user.id)),
-    #("username", json.string(user.username)),
+    #("id", json.string(user.id.v)),
+    #("username", json.string(user.username.v)),
     #("email", json.string(user.email)),
     #("email_verified", json.bool(user.email_verified)),
   ])

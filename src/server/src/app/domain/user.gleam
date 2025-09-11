@@ -6,21 +6,34 @@ import gleam/json
 import gleam/list
 import gleam/result
 import pog
-import shared_user
+import shared_user.{type Username, Username}
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
+
+// ################################################################################
+// Value types
+// ################################################################################
+
+pub type UserId {
+  UserId(v: Uuid)
+}
 
 // ################################################################################
 // Entity
 // ################################################################################
 
 pub type UserEntity {
-  UserEntity(id: Uuid, username: String, email: String, email_verified: Bool)
+  UserEntity(
+    id: UserId,
+    username: Username,
+    email: String,
+    email_verified: Bool,
+  )
 }
 
 pub fn to_dto(u: UserEntity) -> shared_user.UserDto {
   shared_user.UserDto(
-    uuid.to_string(u.id),
+    u.id.v |> uuid.to_string |> shared_user.UserId,
     u.username,
     u.email,
     u.email_verified,
@@ -28,11 +41,21 @@ pub fn to_dto(u: UserEntity) -> shared_user.UserDto {
 }
 
 pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
-  UserEntity(el.id, el.username, el.email, el.email_verified)
+  UserEntity(
+    el.id |> UserId,
+    el.username |> Username,
+    el.email,
+    el.email_verified,
+  )
 }
 
 pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
-  UserEntity(el.id, el.username, el.email, el.email_verified)
+  UserEntity(
+    el.id |> UserId,
+    el.username |> Username,
+    el.email,
+    el.email_verified,
+  )
 }
 
 // ################################################################################
@@ -92,7 +115,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> result.map_error(fn(_) { ServerError }),
     )
 
-    Ok(UserEntity(user_id, dto.username, dto.email, False))
+    Ok(UserEntity(user_id |> UserId, dto.username |> Username, dto.email, False))
   }
 
   case result {
