@@ -153,34 +153,26 @@ pub fn login(
 
   case verify_user_credentials_and_create_session(db, json) {
     Ok(session) -> {
-      case user.select_user(db, session.user_id) {
-        Ok(user_entity) -> {
-          wisp.ok()
-          |> wisp.set_cookie(
-            req,
-            "session_id",
-            uuid.to_string(session.id),
-            wisp.Signed,
-            day_in_seconds,
-          )
-          |> wisp.set_cookie(
-            req,
-            "csrf_token",
-            session
-              |> csrf_token_builder
-              |> bit_array.base64_url_encode(False),
-            wisp.PlainText,
-            day_in_seconds,
-          )
-          |> wisp.json_body(
-            user_entity
-            |> user.to_dto
-            |> shared_user.to_json
-            |> json.to_string,
-          )
-        }
-        Error(response) -> response
-      }
+      wisp.ok()
+      |> wisp.set_cookie(
+        req,
+        "session_id",
+        uuid.to_string(session.id),
+        wisp.Signed,
+        day_in_seconds,
+      )
+      |> wisp.set_cookie(
+        req,
+        "csrf_token",
+        session
+          |> csrf_token_builder
+          |> bit_array.base64_url_encode(False),
+        wisp.PlainText,
+        day_in_seconds,
+      )
+      |> wisp.json_body(
+        session |> to_session_dto |> shared_session.to_json |> json.to_string,
+      )
     }
     Error(response) -> response
   }

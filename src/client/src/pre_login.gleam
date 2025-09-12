@@ -15,6 +15,7 @@ import lustre/element/html
 import lustre/element/keyed
 import lustre/event
 import rsvp
+import shared_session.{type SessionDto}
 import shared_user.{type UserDto, CreateUserDto}
 import util/form.{type FormField}
 import util/toast
@@ -30,9 +31,9 @@ pub fn element(attributes: List(Attribute(msg))) -> Element(msg) {
   element.element("pre-login", attributes, [])
 }
 
-pub fn on_login_success(handler: fn(UserDto) -> msg) -> Attribute(msg) {
+pub fn on_login_success(handler: fn(SessionDto) -> msg) -> Attribute(msg) {
   event.on("login-success", {
-    decode.at(["detail"], shared_user.decode_user_dto()) |> decode.map(handler)
+    decode.at(["detail"], shared_session.decode_dto()) |> decode.map(handler)
   })
 }
 
@@ -289,7 +290,164 @@ pub fn update(
 // VIEW ------------------------------------------------------------------------
 
 fn view(model: PreLoginState) -> Element(PreLoginMsg) {
-  view_login_signup(model)
+  let mode = model.mode
+  let toggle_button = {
+    let active_toggle_button_class =
+      attribute.class(
+        "flex-1 px-3 py-2 rounded-md text-sm font-medium bg-white text-blue-600 shadow",
+      )
+    let inactive_toggle_button_class =
+      attribute.class(
+        "flex-1 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900",
+      )
+    html.div([attribute.class("flex bg-gray-100 rounded-md p-1")], [
+      html.button(
+        [
+          case mode {
+            Login -> active_toggle_button_class
+            Signup -> inactive_toggle_button_class
+          },
+          event.on_click(UserSetPreLoginMode(Login)),
+          attribute.type_("button"),
+        ],
+        [html.text("Login")],
+      ),
+      html.button(
+        [
+          case mode {
+            Signup -> active_toggle_button_class
+            Login -> inactive_toggle_button_class
+          },
+          event.on_click(UserSetPreLoginMode(Signup)),
+          attribute.type_("button"),
+        ],
+        [html.text("Signup")],
+      ),
+    ])
+  }
+
+  let title =
+    html.h1([attribute.class("text-xl font-bold text-blue-600")], [
+      html.text(case mode {
+        Login -> "Login"
+        Signup -> "Create account"
+      }),
+    ])
+
+  let fields = case mode {
+    Login -> [
+      html_input(
+        mode,
+        LoginUsername,
+        "Username",
+        "text",
+        "username",
+        "your_username",
+        model.login_form_data.username,
+      ),
+      html_input(
+        mode,
+        LoginPassword,
+        "Password",
+        "password",
+        "password",
+        "••••••••",
+        model.login_form_data.password,
+      ),
+    ]
+    Signup -> [
+      html_input(
+        mode,
+        SignupUsername,
+        "Username",
+        "text",
+        "username",
+        "your_username",
+        model.signup_form_data.username,
+      ),
+      html_input(
+        mode,
+        SignupEmail,
+        "Email",
+        "email",
+        "email",
+        "you@example.com",
+        model.signup_form_data.email,
+      ),
+      html_input(
+        mode,
+        SignupPassword,
+        "Password",
+        "password",
+        "password",
+        "••••••••",
+        model.signup_form_data.password,
+      ),
+      html_input(
+        mode,
+        SignupPasswordConfirm,
+        "Confirm password",
+        "password",
+        "password_confirm",
+        "••••••••",
+        model.signup_form_data.password_confirm,
+      ),
+    ]
+  }
+
+  let submit_allowed = case mode {
+    Login ->
+      model.login_form_data.username |> form.field_is_valid
+      && model.login_form_data.password |> form.field_is_valid
+    Signup ->
+      model.signup_form_data.username |> form.field_is_valid
+      && model.signup_form_data.email |> form.field_is_valid
+      && model.signup_form_data.password |> form.field_is_valid
+      && model.signup_form_data.password_confirm |> form.field_is_valid
+  }
+
+  let submit_button =
+    html.button(
+      [
+        attribute.class(
+          "mt-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded transition-colors "
+          <> "disabled:bg-gray-300 "
+          <> "hover:bg-blue-700 ",
+        ),
+        attribute.type_("submit"),
+        attribute.disabled(submit_allowed |> bool.negate),
+      ],
+      [
+        html.text(case mode {
+          Login -> "Log in"
+          Signup -> "Create account"
+        }),
+      ],
+    )
+
+  html.div(
+    [
+      attribute.class(
+        "flex justify-center items-center w-full h-screen bg-gray-50",
+      ),
+    ],
+    [
+      html.form(
+        [
+          attribute.class(
+            "flex flex-col gap-5 p-8 w-80 border rounded-lg shadow-md bg-white",
+          ),
+          attribute.type_("submit"),
+          event.on_submit(fn(_) { UserSubmitForm }),
+        ],
+        list.flatten([
+          [toggle_button, title],
+          fields,
+          [submit_button],
+        ]),
+      ),
+    ],
+  )
 }
 
 fn send_signup_req(
@@ -348,167 +506,6 @@ fn send_login_req(
 }
 
 // VIEW -----------------------------------------------------------------------
-
-pub fn view_login_signup(state: PreLoginState) -> Element(PreLoginMsg) {
-  let mode = state.mode
-  let toggle_button = {
-    let active_toggle_button_class =
-      attribute.class(
-        "flex-1 px-3 py-2 rounded-md text-sm font-medium bg-white text-blue-600 shadow",
-      )
-    let inactive_toggle_button_class =
-      attribute.class(
-        "flex-1 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900",
-      )
-    html.div([attribute.class("flex bg-gray-100 rounded-md p-1")], [
-      html.button(
-        [
-          case mode {
-            Login -> active_toggle_button_class
-            Signup -> inactive_toggle_button_class
-          },
-          event.on_click(UserSetPreLoginMode(Login)),
-          attribute.type_("button"),
-        ],
-        [html.text("Login")],
-      ),
-      html.button(
-        [
-          case mode {
-            Signup -> active_toggle_button_class
-            Login -> inactive_toggle_button_class
-          },
-          event.on_click(UserSetPreLoginMode(Signup)),
-          attribute.type_("button"),
-        ],
-        [html.text("Signup")],
-      ),
-    ])
-  }
-
-  let title =
-    html.h1([attribute.class("text-xl font-bold text-blue-600")], [
-      html.text(case mode {
-        Login -> "Login"
-        Signup -> "Create account"
-      }),
-    ])
-
-  let fields = case mode {
-    Login -> [
-      html_input(
-        mode,
-        LoginUsername,
-        "Username",
-        "text",
-        "username",
-        "your_username",
-        state.login_form_data.username,
-      ),
-      html_input(
-        mode,
-        LoginPassword,
-        "Password",
-        "password",
-        "password",
-        "••••••••",
-        state.login_form_data.password,
-      ),
-    ]
-    Signup -> [
-      html_input(
-        mode,
-        SignupUsername,
-        "Username",
-        "text",
-        "username",
-        "your_username",
-        state.signup_form_data.username,
-      ),
-      html_input(
-        mode,
-        SignupEmail,
-        "Email",
-        "email",
-        "email",
-        "you@example.com",
-        state.signup_form_data.email,
-      ),
-      html_input(
-        mode,
-        SignupPassword,
-        "Password",
-        "password",
-        "password",
-        "••••••••",
-        state.signup_form_data.password,
-      ),
-      html_input(
-        mode,
-        SignupPasswordConfirm,
-        "Confirm password",
-        "password",
-        "password_confirm",
-        "••••••••",
-        state.signup_form_data.password_confirm,
-      ),
-    ]
-  }
-
-  let submit_allowed = case mode {
-    Login ->
-      state.login_form_data.username |> form.field_is_valid
-      && state.login_form_data.password |> form.field_is_valid
-    Signup ->
-      state.signup_form_data.username |> form.field_is_valid
-      && state.signup_form_data.email |> form.field_is_valid
-      && state.signup_form_data.password |> form.field_is_valid
-      && state.signup_form_data.password_confirm |> form.field_is_valid
-  }
-
-  let submit_button =
-    html.button(
-      [
-        attribute.class(
-          "mt-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded transition-colors "
-          <> "disabled:bg-gray-300 "
-          <> "hover:bg-blue-700 ",
-        ),
-        attribute.type_("submit"),
-        attribute.disabled(submit_allowed |> bool.negate),
-      ],
-      [
-        html.text(case mode {
-          Login -> "Log in"
-          Signup -> "Create account"
-        }),
-      ],
-    )
-
-  html.div(
-    [
-      attribute.class(
-        "flex justify-center items-center w-full h-screen bg-gray-50",
-      ),
-    ],
-    [
-      html.form(
-        [
-          attribute.class(
-            "flex flex-col gap-5 p-8 w-80 border rounded-lg shadow-md bg-white",
-          ),
-          attribute.type_("submit"),
-          event.on_submit(fn(_) { UserSubmitForm }),
-        ],
-        list.flatten([
-          [toggle_button, title],
-          fields,
-          [submit_button],
-        ]),
-      ),
-    ],
-  )
-}
 
 pub fn get_error_text(field: FormField(CustomError)) -> option.Option(String) {
   form.get_error(field)

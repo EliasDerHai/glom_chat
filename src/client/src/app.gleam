@@ -1,4 +1,6 @@
 import endpoints
+import gleam/http
+import gleam/http/request
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None}
@@ -10,7 +12,8 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre_websocket.{type WebSocket} as ws
 import pre_login
-import shared_user.{UserDto}
+import rsvp
+import shared_session.{type SessionDto, SessionDto}
 import util/time_util
 import util/toast.{type Toast}
 
@@ -45,41 +48,65 @@ pub type GlobalState {
 }
 
 pub type LoginState {
-  LoginState(user: shared_user.UserDto, web_socket: Option(WebSocket))
+  LoginState(user: SessionDto, web_socket: Option(WebSocket))
 }
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
   let model = Model(PreLogin, GlobalState([]))
+  let effect = check_auth()
 
-  #(model, effect.none())
+  #(model, effect)
+}
+
+fn check_auth() -> Effect(Msg) {
+  let url = endpoints.me()
+  let handler = rsvp.expect_json(shared_session.decode_dto(), CheckedAuth)
+
+  case request.to(url) {
+    Ok(request) ->
+      request
+      |> request.set_method(http.Get)
+      |> rsvp.send(handler)
+    Error(_) -> panic as { "Failed to create request to " <> url }
+  }
 }
 
 // UPDATE ----------------------------------------------------------------------
 
 pub type Msg {
-  LoginSuccess(shared_user.UserDto)
+  LoginSuccess(SessionDto)
   ShowToast(Toast)
   RemoveToast(Int)
   WsWrapper(ws.WebSocketEvent)
+  CheckedAuth(Result(SessionDto, rsvp.Error))
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
+  let noop = #(model, effect.none())
+  let login = fn(session_dto) {
+    #(
+      Model(LoggedIn(LoginState(session_dto, None)), model.global_state),
+      ws.init(endpoints.socket_address(), WsWrapper),
+    )
+  }
+
   case model.app_state, msg {
+    // ### AUTH CHECK ###
+    _, CheckedAuth(Ok(session_dto)) -> session_dto |> login
+    // no toast bc we do auth-check on-init
+    _, CheckedAuth(Error(e)) -> {
+      echo e
+      noop
+    }
+
     // ### TOASTS ###
     _, ShowToast(toast_msg) -> show_toast(model, toast_msg)
     _, RemoveToast(toast_id) -> remove_toast(model, toast_id)
 
     // ### LOGIN ###
-    PreLogin, LoginSuccess(user_dto) -> {
-      #(
-        Model(LoggedIn(LoginState(user_dto, None)), model.global_state),
-        ws.init(endpoints.socket_address(), WsWrapper),
-      )
-    }
-    LoggedIn(_), LoginSuccess(_) -> {
-      // already logged in, ignore duplicate login
-      #(model, effect.none())
-    }
+    PreLogin, LoginSuccess(session_dto) -> session_dto |> login
+    // already logged in, ignore duplicate login
+    LoggedIn(_), LoginSuccess(_) -> noop
 
     // ### WEBSOCKET ###
     _, WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
@@ -182,7 +209,8 @@ fn view(model: Model) -> Element(Msg) {
 }
 
 fn view_chat(model: LoginState) -> Element(Msg) {
-  let LoginState(UserDto(_, username, ..), ..) = model
+  let LoginState(SessionDto(_, user_id, ..), ..) = model
+
   html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
     // Sidebar
     html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
@@ -213,7 +241,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       // Header
       html.header([class("p-4 border-b border-gray-200 bg-white shadow-sm")], [
         html.h1([class("text-xl font-semibold")], [
-          html.text("Welcome " <> username.v <> "!"),
+          html.text("Welcome " <> user_id.v <> "!"),
         ]),
       ]),
 

@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+import gleam/float
 import gleam/json
 import gleam/time/timestamp.{type Timestamp}
 import shared_user.{type UserId}
@@ -12,7 +13,7 @@ pub type SessionDto {
   SessionDto(id: SessionId, user_id: UserId, expires_at: Timestamp)
 }
 
-pub fn decode_user_dto() -> decode.Decoder(SessionDto) {
+pub fn decode_dto() -> decode.Decoder(SessionDto) {
   use id <- decode.field("id", decode.string)
   use user_id <- decode.field("user_id", decode.string)
   use expires_at <- decode.field("expires_at", decode.int)
@@ -38,7 +39,8 @@ pub fn to_json(dto: SessionDto) -> json.Json {
       "expires_at",
       dto.expires_at
         |> timestamp.to_unix_seconds
-        |> json.float,
+        |> float.round
+        |> json.int,
     ),
   ])
 }
