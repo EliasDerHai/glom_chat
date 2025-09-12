@@ -7,6 +7,10 @@ pub fn users() {
   api <> "users"
 }
 
+pub fn search_users() {
+  api <> "users/search"
+}
+
 pub fn me() {
   api <> "auth/me"
 }

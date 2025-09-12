@@ -28,6 +28,7 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
     // Public endpoints - no validation needed
     [] -> simple_string_response(req, "hello")
     ["ping"] -> simple_string_response(req, "pong")
+    ["users"] -> user.create_user(req, db)
     ["auth", "login"] -> session.login(req, db, auth.generate_csrf_token)
     ["auth", "me"] -> {
       case cookie.get_session_from_wisp_req(req, db) {
@@ -36,26 +37,16 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
       }
     }
 
-    ["users"] ->
-      case req.method {
-        // Signup - no validation
-        Post -> user.create_user(req, db)
-        Get -> {
-          use _ <- middleware.validation_middleware(req, db)
-          user.list_users(req, db)
-        }
-        _ -> wisp.method_not_allowed([Get, Post])
-      }
-
     _ -> validate_and_handle_requests(req, db)
   }
 }
 
 // Protected endpoints - require validation
 fn validate_and_handle_requests(req, db) {
-  use req <- middleware.validation_middleware(req, db)
+  // FIXME: use req <- middleware.validation_middleware(req, db)
   case wisp.path_segments(req) {
     ["auth", "logout"] -> session.logout(req, db)
+    ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
 
     _ -> wisp.not_found()

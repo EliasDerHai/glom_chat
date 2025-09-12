@@ -5,9 +5,11 @@ import app_types.{
   ShowToast, UserModalClose, UserModalOpen, UserSearchInputChange, WsWrapper,
 }
 import endpoints
+import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
@@ -22,6 +24,7 @@ import lustre_websocket as ws
 import pre_login
 import rsvp
 import shared_session
+import shared_user
 import util/icons
 import util/toast
 import util/toast_state
@@ -104,7 +107,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           login_state.new_conversation,
           search_usernames(v),
         )
-        ApiSearchResponse(_r) -> todo
+        ApiSearchResponse(r) -> {
+          case r {
+            Error(e) -> {
+              // TODO: add toast for failed request? 
+              echo e
+              todo
+            }
+            Ok(list) -> #(Some(NewConversation(list)), effect.none())
+          }
+        }
       }
 
       #(
@@ -118,20 +130,30 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn search_usernames(v: String) -> Effect(a) {
-  echo "search by " <> v
-  // let url = endpoints.me()
-  // let handler = rsvp.expect_json(shared_session.decode_dto(), CheckedAuth)
-  //
-  // case request.to(url) {
-  //   Ok(request) ->
-  //     request
-  //     |> request.set_method(http.Get)
-  //     |> rsvp.send(handler)
-  //   Error(_) -> panic as { "Failed to create request to " <> url }
-  // }
+fn search_usernames(value: String) -> Effect(Msg) {
+  let url = endpoints.search_users()
+  let handler =
+    shared_user.decode_user_mini_dto()
+    |> decode.list
+    |> rsvp.expect_json(ApiSearchResponse)
 
-  effect.none()
+  let body =
+    value
+    |> shared_user.Username
+    |> shared_user.UsersByUsernameDto
+    |> shared_user.users_by_username_dto_to_json
+    |> json.to_string
+
+  case request.to(url) {
+    Ok(request) ->
+      request
+      |> request.set_method(http.Post)
+      |> request.set_header("content-type", "application/json")
+      |> request.set_body(body)
+      |> rsvp.send(handler)
+      |> effect.map(NewConversationMsg)
+    Error(_) -> panic as { "Failed to create request to " <> url }
+  }
 }
 
 fn handle_socket_event(
@@ -334,7 +356,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
                     [],
                     list.map(dtos, fn(dto) {
                       html.p([class("text-gray-500")], [
-                        html.text(dto.v),
+                        html.text(dto.username.v),
                       ])
                     }),
                   )

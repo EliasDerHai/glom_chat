@@ -3,7 +3,7 @@ import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
 import shared_session.{type SessionDto}
-import shared_user.{type Username}
+import shared_user.{type UserMiniDto, type Username}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -36,7 +36,7 @@ pub type LoginState {
 }
 
 pub type NewConversation {
-  NewConversation(suggestions: List(Username))
+  NewConversation(suggestions: List(UserMiniDto))
 }
 
 pub type SocketState {
@@ -59,5 +59,5 @@ pub type NewConversationMsg {
   UserModalOpen
   UserModalClose
   UserSearchInputChange(String)
-  ApiSearchResponse(List(shared_user.UserDto))
+  ApiSearchResponse(Result(List(UserMiniDto), rsvp.Error))
 }

@@ -498,9 +498,9 @@ fn send_login_req(
       request
       |> request.set_method(http.Post)
       |> request.set_header("content-type", "application/json")
-      |> request.set_body(json.to_string(
-        create |> shared_user.user_loging_dto_to_json,
-      ))
+      |> request.set_body(
+        create |> shared_user.user_loging_dto_to_json |> json.to_string,
+      )
       |> rsvp.send(handler)
 
     Error(_) -> panic as { "Failed to create request to " <> url }

@@ -61,6 +61,7 @@ pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
 
 /// GET `/users` endpoint
 pub fn list_users(req: Request, db: DbPool) -> Response {
+  use <- wisp.require_method(req, http.Post)
   use json <- wisp.require_json(req)
 
   let search_username =
@@ -99,6 +100,7 @@ type CreateUserErrorReason {
 
 /// POST `/users` endpoint
 pub fn create_user(req: Request, db: DbPool) -> Response {
+  use <- wisp.require_method(req, http.Post)
   use json <- wisp.require_json(req)
 
   let result = {
