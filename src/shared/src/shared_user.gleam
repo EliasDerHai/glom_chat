@@ -93,3 +93,49 @@ pub fn user_loging_dto_to_json(user_login: UserLoginDto) -> json.Json {
     #("password", json.string(user_login.password)),
   ])
 }
+
+// USERS_BY_USERNAME
+
+pub type UsersByUsernameDto {
+  UsersByUsernameDto(username: Username)
+}
+
+pub fn decode_users_by_username_dto() -> decode.Decoder(UsersByUsernameDto) {
+  use username <- decode.field("username", decode.string)
+  decode.success(username |> Username |> UsersByUsernameDto)
+}
+
+/// {
+///   "username": "John",
+/// }
+pub fn users_by_username_dto_to_json(dto: UsersByUsernameDto) -> json.Json {
+  json.object([
+    #("username", json.string(dto.username.v)),
+  ])
+}
+
+// USER_ID USERNAME TUPLE
+pub type UserMiniDto {
+  UserMiniDto(id: UserId, username: Username)
+}
+
+pub fn to_id_username_dto(value: #(UserId, Username)) -> UserMiniDto {
+  UserMiniDto(value.0, value.1)
+}
+
+pub fn decode_user_mini_dto() -> decode.Decoder(UserMiniDto) {
+  use id <- decode.field("id", decode.string)
+  use username <- decode.field("username", decode.string)
+  decode.success(UserMiniDto(id |> UserId, username |> Username))
+}
+
+/// {
+///   "id": "0199163d-e168-753a-abb9-c09aab0123cd",
+///   "username": "John",
+/// }
+pub fn user_mini_dto_to_json(dto: UserMiniDto) -> json.Json {
+  json.object([
+    #("id", json.string(dto.id.v)),
+    #("username", json.string(dto.username.v)),
+  ])
+}

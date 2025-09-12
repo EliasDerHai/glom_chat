@@ -94,18 +94,24 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### CHAT ###
     NewConversationMsg(msg) -> {
-      let assert LoggedIn(LoginState(s, w, new_conversation)) = model.app_state
+      let assert LoggedIn(login_state) = model.app_state
         as "must be logged in at this point"
 
       let #(new_conversation, effect) = case msg {
         UserModalOpen -> #(Some(NewConversation([])), effect.none())
         UserModalClose -> #(None, effect.none())
-        UserSearchInputChange(v) -> #(new_conversation, search_usernames(v))
+        UserSearchInputChange(v) -> #(
+          login_state.new_conversation,
+          search_usernames(v),
+        )
         ApiSearchResponse(_r) -> todo
       }
 
       #(
-        Model(LoggedIn(LoginState(s, w, new_conversation)), model.global_state),
+        Model(
+          LoggedIn(LoginState(..login_state, new_conversation:)),
+          model.global_state,
+        ),
         effect,
       )
     }

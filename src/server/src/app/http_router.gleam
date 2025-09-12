@@ -42,7 +42,7 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
         Post -> user.create_user(req, db)
         Get -> {
           use _ <- middleware.validation_middleware(req, db)
-          user.list_users(db)
+          user.list_users(req, db)
         }
         _ -> wisp.method_not_allowed([Get, Post])
       }

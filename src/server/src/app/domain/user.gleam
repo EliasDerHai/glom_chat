@@ -40,13 +40,10 @@ pub fn to_dto(u: UserEntity) -> shared_user.UserDto {
   )
 }
 
-pub fn from_select_users_row(el: sql.SelectUsersRow) -> UserEntity {
-  UserEntity(
-    el.id |> UserId,
-    el.username |> Username,
-    el.email,
-    el.email_verified,
-  )
+pub fn from_select_users_row(
+  el: sql.SelectUsersByUsernameRow,
+) -> #(UserId, Username) {
+  #(el.id |> UserId, el.username |> Username)
 }
 
 pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
@@ -63,16 +60,30 @@ pub fn from_select_user_row(el: sql.SelectUserRow) -> UserEntity {
 // ################################################################################
 
 /// GET `/users` endpoint
-pub fn list_users(db: DbPool) -> Response {
+pub fn list_users(req: Request, db: DbPool) -> Response {
+  use json <- wisp.require_json(req)
+
+  let search_username =
+    decode.run(json, shared_user.decode_users_by_username_dto())
+    |> result.map(fn(dto) { dto.username })
+    |> result.map_error(fn(_) { "" |> Username })
+    |> result.unwrap_both()
+
   case
     db
     |> pool.conn()
-    |> sql.select_users(100, 0)
+    |> sql.select_users_by_username(search_username.v, 50)
   {
     Error(_) -> wisp.internal_server_error()
     Ok(r) -> {
       list.map(r.rows, from_select_users_row)
-      |> json.array(fn(el) { el |> to_dto |> shared_user.to_json })
+      |> json.array(fn(el) {
+        let #(user_id, username) = el
+
+        #(user_id.v |> uuid.to_string |> shared_user.UserId, username)
+        |> shared_user.to_id_username_dto()
+        |> shared_user.user_mini_dto_to_json
+      })
       |> json.to_string
       |> wisp.json_response(200)
     }
