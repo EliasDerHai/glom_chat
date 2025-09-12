@@ -15,6 +15,10 @@ lustre_websocket = ">= 0.9.0 and < 1.0.0"
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
 lustre_dev_tools = ">= 1.6.5 and < 2.0.0"
+lucide_lustre = ">= 2.0.1 and < 3.0.0"
 
 [javascript]
 runtime = "node"
+
+[lucide_lustre]
+output_module = "util/icons"

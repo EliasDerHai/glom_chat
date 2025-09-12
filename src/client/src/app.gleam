@@ -18,6 +18,7 @@ import lustre_websocket as ws
 import pre_login
 import rsvp
 import shared_session.{SessionDto}
+import util/icons
 import util/toast
 import util/toast_state
 
@@ -175,6 +176,12 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       ]),
       // Chat List
       html.div([class("flex-1 overflow-y-auto")], [
+        html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
+          html.button([class("flex items-center gap-1")], [
+            icons.message_circle_plus([class("size-4")]),
+            html.text("New conversation"),
+          ]),
+        ]),
         // Placeholder for chat list items
         html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
           html.text("Chat with User A"),
