@@ -22,7 +22,7 @@ pub fn get_session_from_mist_req(
   use session_id_str <- result.try(
     get_cookie_from_header(req.headers, "session_id", wisp.Signed, secret)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie")
+      io.println("Failed to get session_id cookie (mist)")
       wisp.response(401)
     }),
   )
@@ -30,7 +30,7 @@ pub fn get_session_from_mist_req(
   use session_id <- result.try(
     uuid.from_string(session_id_str)
     |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID")
+      io.println("Failed to parse session_id UUID (mist)")
       wisp.response(401)
     }),
   )
@@ -38,7 +38,7 @@ pub fn get_session_from_mist_req(
   use session <- result.try(
     session.get_session(db, session_id)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
+      io.println("Failed to get session from database (mist)")
       wisp.response(401)
     }),
   )
@@ -80,7 +80,7 @@ pub fn get_session_from_wisp_req(
   use session_id_str <- result.try(
     wisp.get_cookie(req, "session_id", wisp.Signed)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie")
+      io.println("Failed to get session_id cookie (wisp)")
       wisp.response(401)
     }),
   )
@@ -88,7 +88,7 @@ pub fn get_session_from_wisp_req(
   use session_id <- result.try(
     uuid.from_string(session_id_str)
     |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID")
+      io.println("Failed to parse session_id UUID (wisp)")
       wisp.response(401)
     }),
   )
@@ -96,7 +96,7 @@ pub fn get_session_from_wisp_req(
   use session <- result.try(
     session.get_session(db, session_id)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
+      io.println("Failed to get session from database (wisp)")
       wisp.response(401)
     }),
   )

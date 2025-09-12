@@ -1,4 +1,3 @@
-import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -152,7 +151,8 @@ pub fn login(
   let _ = cleanup_expired_sessions(db)
 
   case verify_user_credentials_and_create_session(db, json) {
-    Ok(session) -> {
+    Error(response) -> response
+    Ok(session) ->
       wisp.ok()
       |> wisp.set_cookie(
         req,
@@ -173,8 +173,6 @@ pub fn login(
       |> wisp.json_body(
         session |> to_session_dto |> shared_session.to_json |> json.to_string,
       )
-    }
-    Error(response) -> response
   }
 }
 

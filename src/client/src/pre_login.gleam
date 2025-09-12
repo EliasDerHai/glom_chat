@@ -108,7 +108,7 @@ pub type PreLoginMsg {
   UserChangeForm(PreLoginFormProperty, String)
   UserBlurForm(PreLoginFormProperty)
   ApiRespondSignupRequest(Result(UserDto, rsvp.Error))
-  ApiRespondLoginRequest(Result(UserDto, rsvp.Error))
+  ApiRespondLoginRequest(Result(SessionDto, rsvp.Error))
 }
 
 pub type PreLoginFormProperty {
@@ -268,8 +268,8 @@ pub fn update(
 
     ApiRespondLoginRequest(result) ->
       case result {
-        Ok(user_dto) ->
-          event.emit("login-success", shared_user.to_json(user_dto))
+        Ok(session_dto) ->
+          event.emit("login-success", shared_session.to_json(session_dto))
         Error(e) -> {
           let error_message = case e {
             rsvp.HttpError(r) if r.status == 401 ->
@@ -480,10 +480,10 @@ fn send_signup_req(
 
 fn send_login_req(
   login_details: LoginDetails,
-  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> PreLoginMsg,
+  on_response handle_response: fn(Result(SessionDto, rsvp.Error)) -> PreLoginMsg,
 ) -> Effect(PreLoginMsg) {
   let url = endpoints.login()
-  let handler = rsvp.expect_json(shared_user.decode_user_dto(), handle_response)
+  let handler = rsvp.expect_json(shared_session.decode_dto(), handle_response)
 
   let create =
     shared_user.UserLoginDto(
