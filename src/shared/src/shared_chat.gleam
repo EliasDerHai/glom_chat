@@ -1,20 +1,17 @@
 import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
-import shared_user
+import shared_user.{type UserId, type Username}
 
 pub type ChatConversation {
-  ChatConversation(
-    participants: List(shared_user.UserId),
-    messages: List(ChatMessage),
-  )
+  ChatConversation(participants: List(UserId), messages: List(ChatMessage))
 }
 
 pub type ChatMessage {
   ChatMessage(
     /// user_id
-    sender: shared_user.UserId,
+    sender: UserId,
     /// username
-    receiver: shared_user.Username,
+    receiver: Username,
     delivery: ChatMessageDelivery,
     /// utc when server received (sent) message
     sent_time: Option(Timestamp),

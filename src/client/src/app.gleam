@@ -1,23 +1,25 @@
+import app_types.{
+  type LoginState, type Model, type Msg, CheckedAuth, Established, GlobalState,
+  LoggedIn, LoginState, LoginSuccess, Model, Pending, PreLogin, RemoveToast,
+  ShowToast, WsWrapper,
+}
 import endpoints
 import gleam/http
 import gleam/http/request
 import gleam/io
-import gleam/list
-import gleam/order
 import gleam/string
-import gleam/time/duration
 import gleam/time/timestamp
 import lustre
 import lustre/attribute.{class, placeholder}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
-import lustre_websocket.{type WebSocket} as ws
+import lustre_websocket as ws
 import pre_login
 import rsvp
-import shared_session.{type SessionDto, SessionDto}
-import util/time_util
-import util/toast.{type Toast}
+import shared_session.{SessionDto}
+import util/toast
+import util/toast_state
 
 // MAIN ------------------------------------------------------------------------
 
@@ -28,35 +30,7 @@ pub fn main() {
   let assert Ok(_) = lustre.start(app, "#app", Nil)
 }
 
-// MODEL -----------------------------------------------------------------------
-
-/// overall model including all state
-pub type Model {
-  Model(app_state: AppState, global_state: GlobalState)
-}
-
-/// state of the app with business logic
-pub type AppState {
-  PreLogin
-  LoggedIn(LoginState)
-}
-
-/// separate global state incl.
-/// - toasts 
-/// - configs (potentially)
-/// shouldn't relate to business logic
-pub type GlobalState {
-  GlobalState(toasts: List(Toast))
-}
-
-pub type LoginState {
-  LoginState(user: SessionDto, web_socket: SocketState)
-}
-
-pub type SocketState {
-  Pending(since: timestamp.Timestamp)
-  Established(WebSocket)
-}
+// INIT ------------------------------------------------------------------------
 
 pub fn init(_) -> #(Model, Effect(Msg)) {
   let model = Model(PreLogin, GlobalState([]))
@@ -80,14 +54,6 @@ fn check_auth() -> Effect(Msg) {
 
 // UPDATE ----------------------------------------------------------------------
 
-pub type Msg {
-  LoginSuccess(SessionDto)
-  ShowToast(Toast)
-  RemoveToast(Int)
-  WsWrapper(ws.WebSocketEvent)
-  CheckedAuth(Result(SessionDto, rsvp.Error))
-}
-
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   let noop = #(model, effect.none())
   let login = fn(session_dto) {
@@ -107,8 +73,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     _, CheckedAuth(Error(_)) -> noop
 
     // ### TOASTS ###
-    _, ShowToast(toast_msg) -> show_toast(model, toast_msg)
-    _, RemoveToast(toast_id) -> remove_toast(model, toast_id)
+    _, ShowToast(toast_msg) -> toast_state.show_toast(model, toast_msg)
+    _, RemoveToast(toast_id) -> toast_state.remove_toast(model, toast_id)
 
     // ### LOGIN ###
     PreLogin, LoginSuccess(session_dto) -> session_dto |> login
@@ -166,55 +132,10 @@ fn handle_socket_event(
   }
 }
 
-fn show_toast(model: Model, toast_msg: Toast) -> #(Model, Effect(Msg)) {
-  let new_toasts = toast.add_toast(model.global_state.toasts, toast_msg)
-  let new_global_state = GlobalState(new_toasts)
-  let timeout_effect =
-    effect.from(fn(dispatch) {
-      time_util.set_timeout(
-        fn() { dispatch(RemoveToast(toast_msg.id)) },
-        toast_msg.duration,
-      )
-    })
-  #(Model(model.app_state, new_global_state), timeout_effect)
-}
-
-fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
-  let new_toasts = toast.remove_toast_by_id(model.global_state.toasts, toast_id)
-  let new_global_state = GlobalState(new_toasts)
-  #(Model(model.app_state, new_global_state), effect.none())
-}
-
-/// deriving socket-conn-lost info directly from model
-/// error toast shows after 5 sec without socket conn
-fn toast_incl_socket_disconnet(model: Model) {
-  case model.app_state {
-    LoggedIn(LoginState(_, Pending(since))) -> {
-      case
-        timestamp.compare(
-          since |> timestamp.add(duration.seconds(5)),
-          timestamp.system_time(),
-        )
-      {
-        order.Gt ->
-          toast.add_toast(
-            model.global_state.toasts,
-            toast.create_error_toast("Socket connection lost - reconnecting..."),
-          )
-        _ -> model.global_state.toasts
-      }
-    }
-    _ ->
-      list.filter(model.global_state.toasts, fn(toast_msg) {
-        !string.starts_with(toast_msg.content, "Socket connection lost")
-      })
-  }
-}
-
 // VIEW ------------------------------------------------------------------------
 
 fn view(model: Model) -> Element(Msg) {
-  let toasts = toast_incl_socket_disconnet(model)
+  let toasts = toast_state.toast_incl_socket_disconnet(model)
 
   html.div([], [
     // Main content based on app state
