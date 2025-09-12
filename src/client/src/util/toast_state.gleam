@@ -37,7 +37,7 @@ pub fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
 /// error toast shows after 5 sec without socket conn
 pub fn toast_incl_socket_disconnet(model: Model) {
   case model.app_state {
-    LoggedIn(LoginState(_, Pending(since))) -> {
+    LoggedIn(LoginState(_, Pending(since), _)) -> {
       case
         timestamp.compare(
           since |> timestamp.add(duration.seconds(5)),

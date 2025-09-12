@@ -1,7 +1,10 @@
+import gleam/option
 import gleam/time/timestamp
 import lustre_websocket.{type WebSocket} as ws
 import rsvp
 import shared_session.{type SessionDto}
+import shared_user.{type Username}
+import util/form.{type FormField}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -26,7 +29,15 @@ pub type GlobalState {
 }
 
 pub type LoginState {
-  LoginState(user: SessionDto, web_socket: SocketState)
+  LoginState(
+    user: SessionDto,
+    web_socket: SocketState,
+    new_conversation: option.Option(NewConversation),
+  )
+}
+
+pub type NewConversation {
+  NewConversation(field: FormField(Nil), suggestions: List(Username))
 }
 
 pub type SocketState {
@@ -42,4 +53,5 @@ pub type Msg {
   RemoveToast(Int)
   WsWrapper(ws.WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
+  OpenNewConversation
 }

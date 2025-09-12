@@ -1,12 +1,13 @@
 import app_types.{
   type LoginState, type Model, type Msg, CheckedAuth, Established, GlobalState,
-  LoggedIn, LoginState, LoginSuccess, Model, Pending, PreLogin, RemoveToast,
-  ShowToast, WsWrapper,
+  LoggedIn, LoginState, LoginSuccess, Model, OpenNewConversation, Pending,
+  PreLogin, RemoveToast, ShowToast, WsWrapper,
 }
 import endpoints
 import gleam/http
 import gleam/http/request
 import gleam/io
+import gleam/option.{None}
 import gleam/string
 import gleam/time/timestamp
 import lustre
@@ -14,6 +15,7 @@ import lustre/attribute.{class, placeholder}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
+import lustre/event
 import lustre_websocket as ws
 import pre_login
 import rsvp
@@ -60,7 +62,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   let login = fn(session_dto) {
     #(
       Model(
-        LoggedIn(LoginState(session_dto, Pending(timestamp.system_time()))),
+        LoggedIn(LoginState(session_dto, Pending(timestamp.system_time()), None)),
         model.global_state,
       ),
       ws.init(endpoints.socket_address(), WsWrapper),
@@ -84,6 +86,12 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### WEBSOCKET ###
     _, WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
+
+    // ### CHAT ###
+    _, OpenNewConversation -> {
+      // TODO: open overlay/modal
+      noop
+    }
   }
 }
 
@@ -176,12 +184,18 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       ]),
       // Chat List
       html.div([class("flex-1 overflow-y-auto")], [
-        html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
-          html.button([class("flex items-center gap-1")], [
+        html.button(
+          [
+            class(
+              "flex items-center gap-1 p-4 hover:bg-gray-100 cursor-pointer w-full",
+            ),
+            event.on_click(OpenNewConversation),
+          ],
+          [
             icons.message_circle_plus([class("size-4")]),
             html.text("New conversation"),
-          ]),
-        ]),
+          ],
+        ),
         // Placeholder for chat list items
         html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
           html.text("Chat with User A"),
