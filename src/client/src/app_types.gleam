@@ -1,6 +1,6 @@
-import gleam/option
-import gleam/time/timestamp
-import lustre_websocket.{type WebSocket} as ws
+import gleam/option.{type Option}
+import gleam/time/timestamp.{type Timestamp}
+import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
 import shared_session.{type SessionDto}
 import shared_user.{type Username}
@@ -32,7 +32,7 @@ pub type LoginState {
   LoginState(
     user: SessionDto,
     web_socket: SocketState,
-    new_conversation: option.Option(NewConversation),
+    new_conversation: Option(NewConversation),
   )
 }
 
@@ -41,7 +41,7 @@ pub type NewConversation {
 }
 
 pub type SocketState {
-  Pending(since: timestamp.Timestamp)
+  Pending(since: Timestamp)
   Established(WebSocket)
 }
 
@@ -51,8 +51,9 @@ pub type Msg {
   LoginSuccess(SessionDto)
   ShowToast(Toast)
   RemoveToast(Int)
-  WsWrapper(ws.WebSocketEvent)
+  WsWrapper(WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
   OpenNewConversation
   CloseNewConversation
+  UpdateNewConversationQuery(String)
 }

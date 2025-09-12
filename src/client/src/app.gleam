@@ -2,7 +2,7 @@ import app_types.{
   type LoginState, type Model, type Msg, type NewConversation, CheckedAuth,
   CloseNewConversation, Established, GlobalState, LoggedIn, LoginState,
   LoginSuccess, Model, NewConversation, OpenNewConversation, Pending, PreLogin,
-  RemoveToast, ShowToast, WsWrapper,
+  RemoveToast, ShowToast, UpdateNewConversationQuery, WsWrapper,
 }
 import endpoints
 import gleam/http
@@ -102,8 +102,25 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let model = Model(LoggedIn(new_state), model.global_state)
       #(model, effect.none())
     }
+    LoggedIn(LoginState(user, websocket, option.Some(f))),
+      UpdateNewConversationQuery(q)
+    -> {
+      let new_state =
+        LoginState(
+          user,
+          websocket,
+          new_conversation: option.Some(NewConversation(
+            form.set_string_value(f.field, q),
+            f.suggestions,
+          )),
+        )
+      let model = Model(LoggedIn(new_state), model.global_state)
+
+      #(model, effect.none())
+    }
     PreLogin, CloseNewConversation -> panic as "invalid state"
     PreLogin, OpenNewConversation -> panic as "invalid state"
+    _, UpdateNewConversationQuery(_) -> panic as "invalid state"
   }
 }
 
@@ -250,40 +267,61 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       ]),
     ]),
     case new_conv {
-      option.Some(new_conv_state) ->
-        view_new_conversation_overlay(new_conv_state)
+      option.Some(new_conv_state) -> view_new_conversation(new_conv_state)
       option.None -> html.div([], [])
     },
   ])
 }
 
-fn view_new_conversation_overlay(_state: NewConversation) -> Element(Msg) {
-  html.div(
-    [
-      class(
-        "absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50",
-      ),
-      event.on_click(CloseNewConversation),
-    ],
-    [
-      html.div([class("bg-white rounded-lg shadow-xl p-6 w-full max-w-md")], [
-        html.h3([class("text-xl font-bold text-blue-600 mb-4")], [
-          html.text("Start a new conversation"),
-        ]),
-        html.input([
-          class(
-            "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-          ),
-          placeholder("Search for a user..."),
-          // TODO: impl event.on_input(UpdateNewConversationQuery),
-        ]),
-        // TODO: Render search results/suggestions here
-        html.div([], [
-          html.p([class("text-gray-500")], [
-            html.text("Search results will appear here."),
-          ]),
-        ]),
-      ]),
-    ],
-  )
+fn view_new_conversation(state: NewConversation) -> Element(Msg) {
+  html.div([class("fixed inset-0 z-50")], [
+    // Backdrop
+    html.div(
+      [
+        class("absolute inset-0 bg-gray-400/70"),
+        event.on_click(CloseNewConversation),
+      ],
+      [],
+    ),
+
+    // Modal
+    html.div(
+      [
+        class(
+          "absolute inset-0 grid place-items-center z-10 pointer-events-none",
+        ),
+      ],
+      [
+        html.div(
+          [
+            class(
+              "pointer-events-auto bg-white rounded-lg shadow-xl p-6 w-full max-w-md",
+            ),
+          ],
+          [
+            html.h3([class("text-xl font-bold text-blue-600 mb-4")], [
+              html.text("Start a new conversation"),
+            ]),
+            html.input([
+              class(
+                "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+              ),
+              placeholder("Search user..."),
+              attribute.value(
+                state.field.value |> form.get_form_field_value_as_string,
+              ),
+              event.on_input(UpdateNewConversationQuery),
+              // TODO: event.on_input(UpdateNewConversationQuery),
+            ]),
+            // TODO: search results
+            html.div([], [
+              html.p([class("text-gray-500")], [
+                html.text("Search results will appear here."),
+              ]),
+            ]),
+          ],
+        ),
+      ],
+    ),
+  ])
 }
