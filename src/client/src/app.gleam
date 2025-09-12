@@ -1,14 +1,15 @@
 import app_types.{
-  type LoginState, type Model, type Msg, type NewConversation, CheckedAuth,
-  CloseNewConversation, Established, GlobalState, LoggedIn, LoginState,
-  LoginSuccess, Model, NewConversation, OpenNewConversation, Pending, PreLogin,
-  RemoveToast, ShowToast, UpdateNewConversationQuery, WsWrapper,
+  type LoginState, type Model, type Msg, type NewConversation, ApiSearchResponse,
+  CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
+  Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
+  ShowToast, UserModalClose, UserModalOpen, UserSearchInputChange, WsWrapper,
 }
 import endpoints
 import gleam/http
 import gleam/http/request
 import gleam/io
-import gleam/option.{None}
+import gleam/list
+import gleam/option.{None, Some}
 import gleam/string
 import gleam/time/timestamp
 import lustre
@@ -21,7 +22,6 @@ import lustre_websocket as ws
 import pre_login
 import rsvp
 import shared_session
-import util/form
 import util/icons
 import util/toast
 import util/toast_state
@@ -71,57 +71,61 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     )
   }
 
-  case model.app_state, msg {
+  case msg {
     // ### AUTH CHECK ###
-    _, CheckedAuth(Ok(session_dto)) -> session_dto |> login
+    CheckedAuth(Ok(session_dto)) -> session_dto |> login
     // no toast bc we do auth-check on-init
-    _, CheckedAuth(Error(_)) -> noop
+    CheckedAuth(Error(_)) -> noop
 
     // ### TOASTS ###
-    _, ShowToast(toast_msg) -> toast_state.show_toast(model, toast_msg)
-    _, RemoveToast(toast_id) -> toast_state.remove_toast(model, toast_id)
+    ShowToast(toast_msg) -> toast_state.show_toast(model, toast_msg)
+    RemoveToast(toast_id) -> toast_state.remove_toast(model, toast_id)
 
     // ### LOGIN ###
-    PreLogin, LoginSuccess(session_dto) -> session_dto |> login
-    // already logged in, ignore duplicate login
-    LoggedIn(_), LoginSuccess(_) -> noop
+    LoginSuccess(session_dto) ->
+      case model.app_state {
+        PreLogin -> session_dto |> login
+        // already logged in, ignore duplicate login
+        LoggedIn(_) -> noop
+      }
 
     // ### WEBSOCKET ###
-    _, WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
+    WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
 
     // ### CHAT ###
-    LoggedIn(state), OpenNewConversation -> {
-      let new_conv = NewConversation(form.string_form_field([]), [])
-      let new_state =
-        LoginState(..state, new_conversation: option.Some(new_conv))
-      let model = Model(LoggedIn(new_state), model.global_state)
-      #(model, effect.none())
-    }
-    LoggedIn(state), CloseNewConversation -> {
-      let new_state = LoginState(..state, new_conversation: option.None)
-      let model = Model(LoggedIn(new_state), model.global_state)
-      #(model, effect.none())
-    }
-    LoggedIn(LoginState(user, websocket, option.Some(f))),
-      UpdateNewConversationQuery(q)
-    -> {
-      let new_state =
-        LoginState(
-          user,
-          websocket,
-          new_conversation: option.Some(NewConversation(
-            form.set_string_value(f.field, q),
-            f.suggestions,
-          )),
-        )
-      let model = Model(LoggedIn(new_state), model.global_state)
+    NewConversationMsg(msg) -> {
+      let assert LoggedIn(LoginState(s, w, new_conversation)) = model.app_state
+        as "must be logged in at this point"
 
-      #(model, effect.none())
+      let #(new_conversation, effect) = case msg {
+        UserModalOpen -> #(Some(NewConversation([])), effect.none())
+        UserModalClose -> #(None, effect.none())
+        UserSearchInputChange(v) -> #(new_conversation, search_usernames(v))
+        ApiSearchResponse(_r) -> todo
+      }
+
+      #(
+        Model(LoggedIn(LoginState(s, w, new_conversation)), model.global_state),
+        effect,
+      )
     }
-    PreLogin, CloseNewConversation -> panic as "invalid state"
-    PreLogin, OpenNewConversation -> panic as "invalid state"
-    _, UpdateNewConversationQuery(_) -> panic as "invalid state"
   }
+}
+
+fn search_usernames(v: String) -> Effect(a) {
+  echo "search by " <> v
+  // let url = endpoints.me()
+  // let handler = rsvp.expect_json(shared_session.decode_dto(), CheckedAuth)
+  //
+  // case request.to(url) {
+  //   Ok(request) ->
+  //     request
+  //     |> request.set_method(http.Get)
+  //     |> rsvp.send(handler)
+  //   Error(_) -> panic as { "Failed to create request to " <> url }
+  // }
+
+  effect.none()
 }
 
 fn handle_socket_event(
@@ -199,7 +203,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
     // Sidebar
     html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
       // Sidebar Header
-      html.div([class("p-4 border-b border-gray-200")], [
+      html.div([class("p-4 bUserModalOpenr-b border-gray-200")], [
         html.h2([class("text-xl font-bold text-blue-600")], [html.text("Chats")]),
       ]),
       // Search Input
@@ -218,7 +222,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             class(
               "flex items-center gap-1 p-4 hover:bg-gray-100 cursor-pointer w-full",
             ),
-            event.on_click(OpenNewConversation),
+            event.on_click(NewConversationMsg(UserModalOpen)),
           ],
           [
             icons.message_circle_plus([class("size-4")]),
@@ -253,7 +257,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             class(
               "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
             ),
-            placeholder("Type your message..."),
+            placeholder("UserModalCloseyour message..."),
           ]),
           html.button(
             [
@@ -267,7 +271,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       ]),
     ]),
     case new_conv {
-      option.Some(new_conv_state) -> view_new_conversation(new_conv_state)
+      Some(new_conv_state) -> view_new_conversation(new_conv_state)
       option.None -> html.div([], [])
     },
   ])
@@ -279,7 +283,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
     html.div(
       [
         class("absolute inset-0 bg-gray-400/70"),
-        event.on_click(CloseNewConversation),
+        event.on_click(NewConversationMsg(UserModalClose)),
       ],
       [],
     ),
@@ -307,17 +311,28 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
                 "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
               ),
               placeholder("Search user..."),
-              attribute.value(
-                state.field.value |> form.get_form_field_value_as_string,
-              ),
-              event.on_input(UpdateNewConversationQuery),
+              event.on_input(fn(value) {
+                NewConversationMsg(UserSearchInputChange(value))
+              }),
               // TODO: event.on_input(UpdateNewConversationQuery),
             ]),
             // TODO: search results
             html.div([], [
-              html.p([class("text-gray-500")], [
-                html.text("Search results will appear here."),
-              ]),
+              case state.suggestions {
+                [] ->
+                  html.p([class("text-gray-500")], [
+                    html.text("Search results will appear here."),
+                  ])
+                dtos ->
+                  html.div(
+                    [],
+                    list.map(dtos, fn(dto) {
+                      html.p([class("text-gray-500")], [
+                        html.text(dto.v),
+                      ])
+                    }),
+                  )
+              },
             ]),
           ],
         ),

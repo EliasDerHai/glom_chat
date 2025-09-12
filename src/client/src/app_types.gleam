@@ -4,7 +4,6 @@ import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
 import shared_session.{type SessionDto}
 import shared_user.{type Username}
-import util/form.{type FormField}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -37,7 +36,7 @@ pub type LoginState {
 }
 
 pub type NewConversation {
-  NewConversation(field: FormField(Nil), suggestions: List(Username))
+  NewConversation(suggestions: List(Username))
 }
 
 pub type SocketState {
@@ -53,7 +52,12 @@ pub type Msg {
   RemoveToast(Int)
   WsWrapper(WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
-  OpenNewConversation
-  CloseNewConversation
-  UpdateNewConversationQuery(String)
+  NewConversationMsg(NewConversationMsg)
+}
+
+pub type NewConversationMsg {
+  UserModalOpen
+  UserModalClose
+  UserSearchInputChange(String)
+  ApiSearchResponse(List(shared_user.UserDto))
 }
