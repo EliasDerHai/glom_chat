@@ -1,7 +1,8 @@
 import app_types.{
-  type LoginState, type Model, type Msg, CheckedAuth, Established, GlobalState,
-  LoggedIn, LoginState, LoginSuccess, Model, OpenNewConversation, Pending,
-  PreLogin, RemoveToast, ShowToast, WsWrapper,
+  type LoginState, type Model, type Msg, type NewConversation, CheckedAuth,
+  CloseNewConversation, Established, GlobalState, LoggedIn, LoginState,
+  LoginSuccess, Model, NewConversation, OpenNewConversation, Pending, PreLogin,
+  RemoveToast, ShowToast, WsWrapper,
 }
 import endpoints
 import gleam/http
@@ -19,7 +20,8 @@ import lustre/event
 import lustre_websocket as ws
 import pre_login
 import rsvp
-import shared_session.{SessionDto}
+import shared_session
+import util/form
 import util/icons
 import util/toast
 import util/toast_state
@@ -88,10 +90,20 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     _, WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
 
     // ### CHAT ###
-    _, OpenNewConversation -> {
-      // TODO: open overlay/modal
-      noop
+    LoggedIn(state), OpenNewConversation -> {
+      let new_conv = NewConversation(form.string_form_field([]), [])
+      let new_state =
+        LoginState(..state, new_conversation: option.Some(new_conv))
+      let model = Model(LoggedIn(new_state), model.global_state)
+      #(model, effect.none())
     }
+    LoggedIn(state), CloseNewConversation -> {
+      let new_state = LoginState(..state, new_conversation: option.None)
+      let model = Model(LoggedIn(new_state), model.global_state)
+      #(model, effect.none())
+    }
+    PreLogin, CloseNewConversation -> panic as "invalid state"
+    PreLogin, OpenNewConversation -> panic as "invalid state"
   }
 }
 
@@ -164,7 +176,7 @@ fn view(model: Model) -> Element(Msg) {
 }
 
 fn view_chat(model: LoginState) -> Element(Msg) {
-  let LoginState(SessionDto(_, _, username, ..), ..) = model
+  let LoginState(session, _, new_conv) = model
 
   html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
     // Sidebar
@@ -208,7 +220,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       // Header
       html.header([class("p-4 border-b border-gray-200 bg-white shadow-sm")], [
         html.h1([class("text-xl font-semibold")], [
-          html.text("Welcome " <> username.v <> "!"),
+          html.text("Welcome " <> session.username.v <> "!"),
         ]),
       ]),
 
@@ -237,5 +249,41 @@ fn view_chat(model: LoginState) -> Element(Msg) {
         ]),
       ]),
     ]),
+    case new_conv {
+      option.Some(new_conv_state) ->
+        view_new_conversation_overlay(new_conv_state)
+      option.None -> html.div([], [])
+    },
   ])
+}
+
+fn view_new_conversation_overlay(_state: NewConversation) -> Element(Msg) {
+  html.div(
+    [
+      class(
+        "absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50",
+      ),
+      event.on_click(CloseNewConversation),
+    ],
+    [
+      html.div([class("bg-white rounded-lg shadow-xl p-6 w-full max-w-md")], [
+        html.h3([class("text-xl font-bold text-blue-600 mb-4")], [
+          html.text("Start a new conversation"),
+        ]),
+        html.input([
+          class(
+            "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+          ),
+          placeholder("Search for a user..."),
+          // TODO: impl event.on_input(UpdateNewConversationQuery),
+        ]),
+        // TODO: Render search results/suggestions here
+        html.div([], [
+          html.p([class("text-gray-500")], [
+            html.text("Search results will appear here."),
+          ]),
+        ]),
+      ]),
+    ],
+  )
 }

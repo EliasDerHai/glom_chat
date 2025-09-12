@@ -54,4 +54,5 @@ pub type Msg {
   WsWrapper(ws.WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
   OpenNewConversation
+  CloseNewConversation
 }
