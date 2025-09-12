@@ -26,8 +26,8 @@ git config core.hooksPath ./scripts/githooks
 echo "✅ Git hooks path configured."
 
 echo "
-🧪 Running initial test suite to verify setup..."
-./scripts/githooks/pre-commit
+🧪 Running tests to verify setup..."
+./scripts/test.sh
 
 echo "
 🚀 Development environment setup complete!"

@@ -1,14 +1,9 @@
 #!/bin/sh
 
-echo "Running pre-commit hook: Executing tests..."
-
 set -e
 
-test_dirs="src/shared src/server src/client"
+# working dir independent
+cd "$(git rev-parse --show-toplevel)"
 
-for dir in $test_dirs; do
-  echo "--- Testing in $dir ---"
-  (cd "$dir" && gleam test)
-  echo "--- Tests passed in $dir ---"
-done
-
+echo "Running pre-commit hook: Executing tests..."
+./scripts/test.sh
