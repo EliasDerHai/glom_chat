@@ -1,3 +1,4 @@
+import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import gleam/bit_array
@@ -14,7 +15,7 @@ import gleam/time/duration
 import gleam/time/timestamp
 import pog
 import shared_session.{type SessionDto, SessionDto}
-import shared_user
+import shared_user.{type Username}
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -32,10 +33,11 @@ pub type SessionEntity {
   )
 }
 
-pub fn to_session_dto(entity: SessionEntity) -> SessionDto {
+pub fn to_session_dto(entity: SessionEntity, username: Username) -> SessionDto {
   SessionDto(
     entity.id |> uuid.to_string |> shared_session.SessionId,
     entity.user_id |> uuid.to_string |> shared_user.UserId,
+    username,
     entity.expires_at,
   )
 }
@@ -152,7 +154,7 @@ pub fn login(
 
   case verify_user_credentials_and_create_session(db, json) {
     Error(response) -> response
-    Ok(session) ->
+    Ok(#(session, username)) ->
       wisp.ok()
       |> wisp.set_cookie(
         req,
@@ -171,7 +173,10 @@ pub fn login(
         day_in_seconds,
       )
       |> wisp.json_body(
-        session |> to_session_dto |> shared_session.to_json |> json.to_string,
+        session
+        |> to_session_dto(username)
+        |> shared_session.to_json
+        |> json.to_string,
       )
   }
 }
@@ -198,7 +203,7 @@ pub fn logout(req: Request, db: DbPool) -> Response {
 fn verify_user_credentials_and_create_session(
   db: DbPool,
   json: dynamic.Dynamic,
-) -> Result(SessionEntity, Response) {
+) -> Result(#(SessionEntity, Username), Response) {
   use dto <- result.try(
     decode.run(json, shared_user.decode_user_login_dto())
     |> result.map_error(fn(_) {
@@ -243,13 +248,22 @@ fn verify_user_credentials_and_create_session(
     |> result.map_error(fn(_) { wisp.internal_server_error() }),
   )
 
-  Ok(session)
+  Ok(#(session, dto.username |> shared_user.Username))
 }
 
-pub fn me(req: Request, _db: DbPool, session: SessionEntity) -> Response {
+pub fn me(req: Request, db: DbPool, session: SessionEntity) -> Response {
   use <- wisp.require_method(req, http.Get)
-  let body =
-    session |> to_session_dto |> shared_session.to_json |> json.to_string
 
-  wisp.json_body(wisp.ok(), body)
+  case user.select_user(db, session.user_id) {
+    Error(e) -> e
+    Ok(user_entity) -> {
+      let body =
+        session
+        |> to_session_dto(user_entity.username)
+        |> shared_session.to_json
+        |> json.to_string
+
+      wisp.json_body(wisp.ok(), body)
+    }
+  }
 }

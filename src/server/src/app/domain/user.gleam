@@ -99,7 +99,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> result.map_error(fn(_) { MalformedPayload }),
     )
 
-    use _ <- result.try(case sql.select_user_by_username(conn, dto.username) {
+    use _ <- result.try(case sql.select_user_by_username(conn, dto.username.v) {
       Ok(r) if r.count >= 1 -> Error(UsernameTaken)
       _ -> Ok(Nil)
     })
@@ -111,11 +111,17 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
     use _ <- result.try(
       conn
-      |> sql.create_user(user_id, dto.username, dto.email, False, dto.password)
+      |> sql.create_user(
+        user_id,
+        dto.username.v,
+        dto.email,
+        False,
+        dto.password,
+      )
       |> result.map_error(fn(_) { ServerError }),
     )
 
-    Ok(UserEntity(user_id |> UserId, dto.username |> Username, dto.email, False))
+    Ok(UserEntity(user_id |> UserId, dto.username, dto.email, False))
   }
 
   case result {

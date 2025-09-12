@@ -45,11 +45,14 @@ pub fn to_json(user: UserDto) -> json.Json {
 // SIGNUP
 
 pub type CreateUserDto {
-  CreateUserDto(username: String, email: String, password: String)
+  CreateUserDto(username: Username, email: String, password: String)
 }
 
 pub fn decode_create_user_dto() -> decode.Decoder(CreateUserDto) {
-  use username <- decode.field("username", decode.string)
+  use username <- decode.field(
+    "username",
+    decode.string |> decode.map(Username),
+  )
   use email <- decode.field("email", decode.string)
   use password <- decode.field("password", decode.string)
   decode.success(CreateUserDto(username:, email:, password:))
@@ -62,7 +65,7 @@ pub fn decode_create_user_dto() -> decode.Decoder(CreateUserDto) {
 /// }
 pub fn create_user_dto_to_json(create_user: CreateUserDto) -> json.Json {
   json.object([
-    #("username", json.string(create_user.username)),
+    #("username", json.string(create_user.username.v)),
     #("email", json.string(create_user.email)),
     #("password", json.string(create_user.password)),
   ])

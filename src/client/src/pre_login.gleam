@@ -16,7 +16,7 @@ import lustre/element/keyed
 import lustre/event
 import rsvp
 import shared_session.{type SessionDto}
-import shared_user.{type UserDto, CreateUserDto}
+import shared_user.{type UserDto, CreateUserDto, Username}
 import util/form.{type FormField}
 import util/toast
 
@@ -459,7 +459,9 @@ fn send_signup_req(
 
   let create =
     CreateUserDto(
-      signup_details.username.value |> form.get_form_field_value_as_string,
+      signup_details.username.value
+        |> form.get_form_field_value_as_string
+        |> Username,
       signup_details.email.value |> form.get_form_field_value_as_string,
       signup_details.password.value |> form.get_form_field_value_as_string,
     )

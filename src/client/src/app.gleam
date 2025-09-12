@@ -234,7 +234,7 @@ fn view(model: Model) -> Element(Msg) {
 }
 
 fn view_chat(model: LoginState) -> Element(Msg) {
-  let LoginState(SessionDto(_, user_id, ..), ..) = model
+  let LoginState(SessionDto(_, _, username, ..), ..) = model
 
   html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
     // Sidebar
@@ -266,7 +266,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       // Header
       html.header([class("p-4 border-b border-gray-200 bg-white shadow-sm")], [
         html.h1([class("text-xl font-semibold")], [
-          html.text("Welcome " <> user_id.v <> "!"),
+          html.text("Welcome " <> username.v <> "!"),
         ]),
       ]),
 
