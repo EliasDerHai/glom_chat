@@ -1,0 +1,14 @@
+#!/bin/sh
+
+echo "Running pre-commit hook: Executing tests..."
+
+set -e
+
+test_dirs="src/shared src/server src/client"
+
+for dir in $test_dirs; do
+  echo "--- Testing in $dir ---"
+  (cd "$dir" && gleam test)
+  echo "--- Tests passed in $dir ---"
+done
+
