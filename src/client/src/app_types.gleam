@@ -3,7 +3,7 @@ import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
 import shared_session.{type SessionDto}
-import shared_user.{type UserMiniDto, type Username}
+import shared_user.{type UserMiniDto}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------

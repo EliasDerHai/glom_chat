@@ -34,6 +34,7 @@ pub fn validation_middleware(
   db: DbPool,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
+  // TODO: do we really need to do a select for each req?? isn't dual verification enough? -> reconsider
   case cookie.get_session_from_wisp_req(req, db) {
     Error(response) -> response
     Ok(session_entity) -> {
@@ -54,18 +55,28 @@ pub fn validation_middleware(
   }
 }
 
+// TODO: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#token-based-mitigation
 fn validate_csrf_and_handle(
   req: wisp.Request,
   session_entity,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> Result(wisp.Response, wisp.Response) {
-  use csrf_token <- result.try(
+  use csrf_token_cookie <- result.try(
+    wisp.get_cookie(req, "csrf_token", wisp.PlainText)
+    |> result.map_error(fn(_) { wisp.response(403) }),
+  )
+
+  use csrf_token_header <- result.try(
     request.get_header(req, "x-csrf-token")
     |> result.map_error(fn(_) { wisp.response(403) }),
   )
 
-  case auth.verify_csrf_token(session_entity, csrf_token) {
-    auth.Passed -> Ok(handle_request(req))
-    auth.Failed -> Error(wisp.response(403))
+  case csrf_token_cookie == csrf_token_header {
+    False -> Error(wisp.response(403))
+    True ->
+      case auth.verify_csrf_token(session_entity, csrf_token_header) {
+        auth.Passed -> Ok(handle_request(req))
+        auth.Failed -> Error(wisp.response(403))
+      }
   }
 }

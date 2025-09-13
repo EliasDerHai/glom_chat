@@ -25,6 +25,7 @@ import pre_login
 import rsvp
 import shared_session
 import shared_user
+import util/cookie
 import util/icons
 import util/toast
 import util/toast_state
@@ -109,10 +110,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         )
         ApiSearchResponse(r) -> {
           case r {
-            Error(e) -> {
+            Error(_) -> {
               // TODO: add toast for failed request? 
-              echo e
-              todo
+              // echo e
+              #(login_state.new_conversation, effect.none())
             }
             Ok(list) -> #(Some(NewConversation(list)), effect.none())
           }
@@ -145,13 +146,20 @@ fn search_usernames(value: String) -> Effect(Msg) {
     |> json.to_string
 
   case request.to(url) {
-    Ok(request) ->
+    Ok(request) -> {
+      let assert Some(csrf_token) = cookie.get_cookie("csrf_token")
+
+      // TODO: cleanup log
+      echo csrf_token
+
       request
       |> request.set_method(http.Post)
       |> request.set_header("content-type", "application/json")
+      |> request.set_header("x-csrf-token", csrf_token)
       |> request.set_body(body)
       |> rsvp.send(handler)
       |> effect.map(NewConversationMsg)
+    }
     Error(_) -> panic as { "Failed to create request to " <> url }
   }
 }

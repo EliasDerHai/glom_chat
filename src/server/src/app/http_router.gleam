@@ -5,7 +5,7 @@ import app/middleware
 import app/persist/pool.{type DbPool}
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
-import gleam/http.{Get, Post}
+import gleam/http.{Get}
 import gleam/http/response
 import mist
 import wisp.{type Response}
@@ -43,7 +43,7 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
 
 // Protected endpoints - require validation
 fn validate_and_handle_requests(req, db) {
-  // FIXME: use req <- middleware.validation_middleware(req, db)
+  use req <- middleware.validation_middleware(req, db)
   case wisp.path_segments(req) {
     ["auth", "logout"] -> session.logout(req, db)
     ["users", "search"] -> user.list_users(req, db)
