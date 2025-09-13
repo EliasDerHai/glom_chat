@@ -71,7 +71,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         LoggedIn(LoginState(session_dto, Pending(timestamp.system_time()), None)),
         model.global_state,
       ),
-      ws.init(endpoints.socket_address(), WsWrapper),
+      effect.none(),
+      // TODO: revert ws.init(endpoints.socket_address(), WsWrapper),
     )
   }
 
@@ -147,9 +148,13 @@ fn search_usernames(value: String) -> Effect(Msg) {
 
   case request.to(url) {
     Ok(request) -> {
-      let assert Some(csrf_token) = cookie.get_cookie("csrf_token")
+      let csrf_token = case cookie.get_cookie("csrf_token") {
+        Some(csrf_token) -> csrf_token
+        None -> ""
+      }
 
       // TODO: cleanup log
+      echo "csrf_token"
       echo csrf_token
 
       request

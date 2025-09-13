@@ -61,22 +61,43 @@ fn validate_csrf_and_handle(
   session_entity,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> Result(wisp.Response, wisp.Response) {
+  echo "validate_csrf_and_handle"
   use csrf_token_cookie <- result.try(
-    wisp.get_cookie(req, "csrf_token", wisp.PlainText)
-    |> result.map_error(fn(_) { wisp.response(403) }),
+    cookie.get_cookie_from_header(
+      req.headers,
+      "csrf_token",
+      wisp.PlainText,
+      <<>>,
+    )
+    // wisp.get_cookie(req, "csrf_token", wisp.PlainText)
+    |> result.map_error(fn(_) {
+      echo "no csrf cookie"
+      wisp.response(403)
+    }),
   )
 
   use csrf_token_header <- result.try(
     request.get_header(req, "x-csrf-token")
-    |> result.map_error(fn(_) { wisp.response(403) }),
+    |> result.map_error(fn(_) {
+      echo "no x-csrf header"
+      wisp.response(403)
+    }),
   )
 
   case csrf_token_cookie == csrf_token_header {
-    False -> Error(wisp.response(403))
-    True ->
-      case auth.verify_csrf_token(session_entity, csrf_token_header) {
-        auth.Passed -> Ok(handle_request(req))
-        auth.Failed -> Error(wisp.response(403))
-      }
+    False -> {
+      echo "csrf_token_cookie != csrf_token_header"
+      echo csrf_token_cookie
+      echo csrf_token_header
+      Error(wisp.response(403))
+    }
+    True -> {
+      echo "csrf check PASSED!!!"
+      Ok(handle_request(req))
+    }
+    //     case auth.verify_csrf_token(session_entity, csrf_token_header) {
+    //       auth.Passed -> Ok(handle_request(req))
+    //       auth.Failed -> Error(wisp.response(403))
+    //     }
   }
 }

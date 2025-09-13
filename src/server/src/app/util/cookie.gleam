@@ -20,7 +20,13 @@ pub fn get_session_from_mist_req(
   secret: BitArray,
 ) -> Result(SessionEntity, Response) {
   use session_id_str <- result.try(
-    get_cookie_from_header(req.headers, "session_id", wisp.Signed, secret)
+    get_cookie_from_header(
+      req.headers,
+      "session_id",
+      // TODO: revert to Signed
+      wisp.PlainText,
+      secret,
+    )
     |> result.map_error(fn(_) {
       io.println("Failed to get session_id cookie (mist)")
       wisp.response(401)
@@ -46,7 +52,7 @@ pub fn get_session_from_mist_req(
   Ok(session)
 }
 
-fn get_cookie_from_header(
+pub fn get_cookie_from_header(
   headers: List(http.Header),
   cookie_name: String,
   security: wisp.Security,
@@ -65,12 +71,19 @@ fn get_cookie_from_header(
     |> list.key_find(cookie_name),
   )
 
-  use value <- result.try(case security {
-    wisp.PlainText -> bit_array.base64_decode(value)
-    wisp.Signed -> crypto.verify_signed_message(value, secret)
-  })
+  echo #(value, security)
 
-  value |> bit_array.to_string
+  //  use value <- result.try(
+  case security {
+    wisp.PlainText -> Ok(value)
+    // bit_array.base64_decode(value)
+    wisp.Signed ->
+      crypto.verify_signed_message(value, secret)
+      |> result.map(bit_array.to_string)
+      |> result.flatten
+  }
+  //)
+  //value 
 }
 
 pub fn get_session_from_wisp_req(
@@ -78,7 +91,13 @@ pub fn get_session_from_wisp_req(
   db: DbPool,
 ) -> Result(SessionEntity, Response) {
   use session_id_str <- result.try(
-    wisp.get_cookie(req, "session_id", wisp.Signed)
+    get_cookie_from_header(req.headers, "session_id", wisp.PlainText, <<>>)
+    //   wisp.get_cookie(
+    //     req,
+    //     "session_id",
+    //     // TODO: revert to Signed
+    //     wisp.PlainText,
+    //   )
     |> result.map_error(fn(_) {
       io.println("Failed to get session_id cookie (wisp)")
       wisp.response(401)
