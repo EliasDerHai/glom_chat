@@ -1,6 +1,6 @@
+import app/domain/session
 import app/persist/pool.{type DbPool}
 import app/registry.{type RegistryMessage, Register, Unregister}
-import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
 import gleam/erlang/process
@@ -25,7 +25,7 @@ pub fn handle_ws_request(
       request: mist_req,
       on_init: fn(conn) {
         let assert Ok(session) =
-          cookie.get_session_from_mist_req(
+          session.get_session_from_mist_req(
             mist_req,
             db,
             bit_array.from_string(secret_key),

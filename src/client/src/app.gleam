@@ -71,8 +71,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         LoggedIn(LoginState(session_dto, Pending(timestamp.system_time()), None)),
         model.global_state,
       ),
-      effect.none(),
-      // TODO: revert ws.init(endpoints.socket_address(), WsWrapper),
+      ws.init(endpoints.socket_address(), WsWrapper),
     )
   }
 
@@ -355,9 +354,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
               event.on_input(fn(value) {
                 NewConversationMsg(UserSearchInputChange(value))
               }),
-              // TODO: event.on_input(UpdateNewConversationQuery),
             ]),
-            // TODO: search results
             html.div([], [
               case state.suggestions {
                 [] ->

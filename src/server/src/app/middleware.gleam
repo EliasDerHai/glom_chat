@@ -1,4 +1,4 @@
-import app/auth
+import app/domain/session
 import app/persist/pool.{type DbPool}
 import app/util/cookie
 import gleam/http.{Get}
@@ -35,7 +35,7 @@ pub fn validation_middleware(
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
   // TODO: do we really need to do a select for each req?? isn't dual verification enough? -> reconsider
-  case cookie.get_session_from_wisp_req(req, db) {
+  case session.get_session_from_wisp_req(req, db) {
     Error(response) -> response
     Ok(session_entity) -> {
       case
@@ -58,7 +58,7 @@ pub fn validation_middleware(
 // TODO: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#token-based-mitigation
 fn validate_csrf_and_handle(
   req: wisp.Request,
-  session_entity,
+  _session_entity,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> Result(wisp.Response, wisp.Response) {
   echo "validate_csrf_and_handle"

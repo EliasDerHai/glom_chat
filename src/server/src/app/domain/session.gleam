@@ -1,15 +1,13 @@
 import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
+import app/util/cookie as glom_cookie
+import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
-import gleam/bool
 import gleam/crypto
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/http.{Post}
-import gleam/http/cookie
-import gleam/http/response
-import gleam/int
 import gleam/io
 import gleam/json
 import gleam/list
@@ -71,33 +69,6 @@ pub fn from_get_session_by_user_id_row(
 // ################################################################################
 
 const day_in_seconds = 86_400
-
-// TODO: move to ../util/cookie.gleam
-fn set_cookie_with_domain(
-  response: Response,
-  name: String,
-  value: String,
-  max_age: Int,
-  http_only: Bool,
-) -> Response {
-  let attributes =
-    cookie.Attributes(
-      max_age: option.Some(max_age),
-      domain: option.Some("localhost"),
-      // Explicit localhost domain for cross-port access
-      path: option.Some("/"),
-      secure: False,
-      // False for development on localhost
-      http_only: False,
-      same_site: option.Some(cookie.Lax),
-    )
-
-  let cookie_header_value = cookie.set_header(name, value, attributes)
-
-  io.println("🍪 COOKIE DEBUG: Set-Cookie header: " <> cookie_header_value)
-
-  response.prepend_header(response, "set-cookie", cookie_header_value)
-}
 
 fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
   let session_id = uuid.v7()
@@ -184,28 +155,16 @@ pub fn login(
   let _ = cleanup_expired_sessions(db)
 
   case verify_user_credentials_and_create_session(db, json) {
-    Error(response) -> {
-      io.println("🍪 LOGIN DEBUG: User credentials verification failed")
-      response
-    }
+    Error(response) -> response
     Ok(#(session, username)) -> {
-      io.println(
-        "🍪 LOGIN DEBUG: User credentials verified successfully for: "
-        <> username.v,
-      )
-      io.println(
-        "🍪 LOGIN DEBUG: Session ID created: " <> uuid.to_string(session.id),
-      )
-      io.println("🍪 LOGIN DEBUG: About to set cookies...")
-
       wisp.ok()
-      |> set_cookie_with_domain(
+      |> glom_cookie.set_cookie_with_domain(
         "session_id",
         uuid.to_string(session.id),
         day_in_seconds,
         True,
       )
-      |> set_cookie_with_domain(
+      |> glom_cookie.set_cookie_with_domain(
         "csrf_token",
         session
           |> csrf_token_builder
@@ -233,8 +192,8 @@ pub fn logout(req: Request, db: DbPool) -> Response {
           let _ = delete_session(db, session_id)
 
           wisp.ok()
-          |> set_cookie_with_domain("session_id", "", 0, True)
-          |> set_cookie_with_domain("csrf_token", "", 0, False)
+          |> glom_cookie.set_cookie_with_domain("session_id", "", 0, True)
+          |> glom_cookie.set_cookie_with_domain("csrf_token", "", 0, False)
         }
         Error(_) -> wisp.bad_request("session_id is not a uuid")
       }
@@ -308,4 +267,87 @@ pub fn me(req: Request, db: DbPool, session: SessionEntity) -> Response {
       wisp.json_body(wisp.ok(), body)
     }
   }
+}
+
+// TODO: 
+// remove workaround once websockets are implemented in wisp
+// see: https://github.com/gleam-wisp/wisp/issues/10
+pub fn get_session_from_mist_req(
+  req: MistRequest,
+  db: DbPool,
+  secret: BitArray,
+) -> Result(SessionEntity, Response) {
+  use session_id_str <- result.try(
+    glom_cookie.get_cookie_from_header(
+      req.headers,
+      "session_id",
+      // TODO: revert to Signed
+      wisp.PlainText,
+      secret,
+    )
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session_id cookie (mist)")
+      wisp.response(401)
+    }),
+  )
+
+  use session_id <- result.try(
+    uuid.from_string(session_id_str)
+    |> result.map_error(fn(_) {
+      io.println("Failed to parse session_id UUID (mist)")
+      wisp.response(401)
+    }),
+  )
+
+  use session <- result.try(
+    get_session(db, session_id)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session from database (mist)")
+      wisp.response(401)
+    }),
+  )
+
+  Ok(session)
+}
+
+pub fn get_session_from_wisp_req(
+  req: wisp.Request,
+  db: DbPool,
+) -> Result(SessionEntity, Response) {
+  use session_id_str <- result.try(
+    glom_cookie.get_cookie_from_header(
+      req.headers,
+      "session_id",
+      wisp.PlainText,
+      <<>>,
+    )
+    //   wisp.get_cookie(
+    //     req,
+    //     "session_id",
+    //     // TODO: revert to Signed
+    //     wisp.PlainText,
+    //   )
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session_id cookie (wisp)")
+      wisp.response(401)
+    }),
+  )
+
+  use session_id <- result.try(
+    uuid.from_string(session_id_str)
+    |> result.map_error(fn(_) {
+      io.println("Failed to parse session_id UUID (wisp)")
+      wisp.response(401)
+    }),
+  )
+
+  use session <- result.try(
+    get_session(db, session_id)
+    |> result.map_error(fn(_) {
+      io.println("Failed to get session from database (wisp)")
+      wisp.response(401)
+    }),
+  )
+
+  Ok(session)
 }

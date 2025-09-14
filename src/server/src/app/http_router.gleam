@@ -3,7 +3,6 @@ import app/domain/session
 import app/domain/user
 import app/middleware
 import app/persist/pool.{type DbPool}
-import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/http.{Get}
 import gleam/http/response
@@ -31,7 +30,7 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
     ["users"] -> user.create_user(req, db)
     ["auth", "login"] -> session.login(req, db, auth.generate_csrf_token)
     ["auth", "me"] -> {
-      case cookie.get_session_from_wisp_req(req, db) {
+      case session.get_session_from_wisp_req(req, db) {
         Ok(session) -> session.me(req, db, session)
         Error(e) -> e
       }

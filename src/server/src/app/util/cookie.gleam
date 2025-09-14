@@ -1,56 +1,12 @@
-import app/domain/session.{type SessionEntity}
-import app/persist/pool.{type DbPool}
-import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
 import gleam/crypto
 import gleam/http
 import gleam/http/cookie
-import gleam/io
+import gleam/http/response
 import gleam/list
+import gleam/option
 import gleam/result
 import wisp.{type Response}
-import youid/uuid
-
-// TODO: 
-// remove workaround once websockets are implemented in wisp
-// see: https://github.com/gleam-wisp/wisp/issues/10
-pub fn get_session_from_mist_req(
-  req: MistRequest,
-  db: DbPool,
-  secret: BitArray,
-) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    get_cookie_from_header(
-      req.headers,
-      "session_id",
-      // TODO: revert to Signed
-      wisp.PlainText,
-      secret,
-    )
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie (mist)")
-      wisp.response(401)
-    }),
-  )
-
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID (mist)")
-      wisp.response(401)
-    }),
-  )
-
-  use session <- result.try(
-    session.get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database (mist)")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(session)
-}
 
 pub fn get_cookie_from_header(
   headers: List(http.Header),
@@ -86,39 +42,26 @@ pub fn get_cookie_from_header(
   //value 
 }
 
-pub fn get_session_from_wisp_req(
-  req: wisp.Request,
-  db: DbPool,
-) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    get_cookie_from_header(req.headers, "session_id", wisp.PlainText, <<>>)
-    //   wisp.get_cookie(
-    //     req,
-    //     "session_id",
-    //     // TODO: revert to Signed
-    //     wisp.PlainText,
-    //   )
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie (wisp)")
-      wisp.response(401)
-    }),
-  )
+pub fn set_cookie_with_domain(
+  response: Response,
+  name: String,
+  value: String,
+  max_age: Int,
+  _http_only: Bool,
+) -> Response {
+  let attributes =
+    cookie.Attributes(
+      max_age: option.Some(max_age),
+      domain: option.Some("localhost"),
+      // Explicit localhost domain for cross-port access
+      path: option.Some("/"),
+      secure: False,
+      // False for development on localhost
+      http_only: False,
+      same_site: option.Some(cookie.Lax),
+    )
 
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID (wisp)")
-      wisp.response(401)
-    }),
-  )
+  let cookie_header_value = cookie.set_header(name, value, attributes)
 
-  use session <- result.try(
-    session.get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database (wisp)")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(session)
+  response.prepend_header(response, "set-cookie", cookie_header_value)
 }
