@@ -2,7 +2,6 @@ import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import app/util/cookie as glom_cookie
-import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic
@@ -146,6 +145,7 @@ pub fn login(
   req: Request,
   db: DbPool,
   csrf_token_builder: fn(SessionEntity) -> BitArray,
+  secret: BitArray,
 ) -> Response {
   use <- wisp.require_method(req, Post)
   use json <- wisp.require_json(req)
@@ -160,7 +160,10 @@ pub fn login(
       wisp.ok()
       |> glom_cookie.set_cookie_with_domain(
         "session_id",
-        uuid.to_string(session.id),
+        session.id
+          |> uuid.to_string
+          |> bit_array.from_string
+          |> crypto.sign_message(secret, crypto.Sha256),
         day_in_seconds,
         True,
       )
@@ -269,32 +272,22 @@ pub fn me(req: Request, db: DbPool, session: SessionEntity) -> Response {
   }
 }
 
-// TODO: 
-// remove workaround once websockets are implemented in wisp
-// see: https://github.com/gleam-wisp/wisp/issues/10
-pub fn get_session_from_mist_req(
-  req: MistRequest,
+pub fn get_session_from_cookie(
   db: DbPool,
-  secret: BitArray,
+  cookie_extractor: fn() -> Result(glom_cookie.Cookie, Nil),
 ) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    glom_cookie.get_cookie_from_header(
-      req.headers,
-      "session_id",
-      // TODO: revert to Signed
-      wisp.PlainText,
-      secret,
-    )
+  use session_id_cookie <- result.try(
+    cookie_extractor()
     |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie (mist)")
+      io.println("Failed to get session_id cookie")
       wisp.response(401)
     }),
   )
 
   use session_id <- result.try(
-    uuid.from_string(session_id_str)
+    uuid.from_string(session_id_cookie.v)
     |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID (mist)")
+      io.println("Failed to parse session_id UUID")
       wisp.response(401)
     }),
   )
@@ -302,49 +295,7 @@ pub fn get_session_from_mist_req(
   use session <- result.try(
     get_session(db, session_id)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session from database (mist)")
-      wisp.response(401)
-    }),
-  )
-
-  Ok(session)
-}
-
-pub fn get_session_from_wisp_req(
-  req: wisp.Request,
-  db: DbPool,
-) -> Result(SessionEntity, Response) {
-  use session_id_str <- result.try(
-    glom_cookie.get_cookie_from_header(
-      req.headers,
-      "session_id",
-      wisp.PlainText,
-      <<>>,
-    )
-    //   wisp.get_cookie(
-    //     req,
-    //     "session_id",
-    //     // TODO: revert to Signed
-    //     wisp.PlainText,
-    //   )
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session_id cookie (wisp)")
-      wisp.response(401)
-    }),
-  )
-
-  use session_id <- result.try(
-    uuid.from_string(session_id_str)
-    |> result.map_error(fn(_) {
-      io.println("Failed to parse session_id UUID (wisp)")
-      wisp.response(401)
-    }),
-  )
-
-  use session <- result.try(
-    get_session(db, session_id)
-    |> result.map_error(fn(_) {
-      io.println("Failed to get session from database (wisp)")
+      io.println("Failed to get session from database")
       wisp.response(401)
     }),
   )

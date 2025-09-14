@@ -1,9 +1,12 @@
 import app/auth
 import app/domain/session
 import app/domain/user
+import app/environment
 import app/middleware
 import app/persist/pool.{type DbPool}
+import app/util/cookie
 import app/util/mist_request.{type MistRequest}
+import gleam/bit_array
 import gleam/http.{Get}
 import gleam/http/response
 import mist
@@ -28,9 +31,19 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
     [] -> simple_string_response(req, "hello")
     ["ping"] -> simple_string_response(req, "pong")
     ["users"] -> user.create_user(req, db)
-    ["auth", "login"] -> session.login(req, db, auth.generate_csrf_token)
+    ["auth", "login"] ->
+      session.login(
+        req,
+        db,
+        auth.generate_csrf_token,
+        environment.get_secret() |> bit_array.from_string,
+      )
     ["auth", "me"] -> {
-      case session.get_session_from_wisp_req(req, db) {
+      let cookie_extractor = fn() {
+        cookie.get_cookie_from_wisp_request(req, "session_id", wisp.Signed)
+      }
+
+      case session.get_session_from_cookie(db, cookie_extractor) {
         Ok(session) -> session.me(req, db, session)
         Error(e) -> e
       }

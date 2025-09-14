@@ -31,11 +31,15 @@ pub fn default_middleware(
 /// middleware that checks session_id cookie and x-csrf-token header for non-GET requests
 pub fn validation_middleware(
   req: wisp.Request,
+  // TODO: do we really need to do a select for each req?? isn't dual verification enough? -> reconsider
   db: DbPool,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
-  // TODO: do we really need to do a select for each req?? isn't dual verification enough? -> reconsider
-  case session.get_session_from_wisp_req(req, db) {
+  let cookie_extractor = fn() {
+    cookie.get_cookie_from_wisp_request(req, "session_id", wisp.Signed)
+  }
+
+  case session.get_session_from_cookie(db, cookie_extractor) {
     Error(response) -> response
     Ok(session_entity) -> {
       case
@@ -46,7 +50,7 @@ pub fn validation_middleware(
           case req.method {
             Get -> handle_request(req)
             _ ->
-              validate_csrf_and_handle(req, session_entity, handle_request)
+              validate_csrf_and_handle(req, handle_request)
               |> result.unwrap_both
           }
         }
@@ -55,21 +59,13 @@ pub fn validation_middleware(
   }
 }
 
-// TODO: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#token-based-mitigation
+// https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#token-based-mitigation
 fn validate_csrf_and_handle(
   req: wisp.Request,
-  _session_entity,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> Result(wisp.Response, wisp.Response) {
-  echo "validate_csrf_and_handle"
   use csrf_token_cookie <- result.try(
-    cookie.get_cookie_from_header(
-      req.headers,
-      "csrf_token",
-      wisp.PlainText,
-      <<>>,
-    )
-    // wisp.get_cookie(req, "csrf_token", wisp.PlainText)
+    cookie.get_cookie_from_wisp_request(req, "csrf_token", wisp.PlainText)
     |> result.map_error(fn(_) {
       echo "no csrf cookie"
       wisp.response(403)
@@ -84,20 +80,8 @@ fn validate_csrf_and_handle(
     }),
   )
 
-  case csrf_token_cookie == csrf_token_header {
-    False -> {
-      echo "csrf_token_cookie != csrf_token_header"
-      echo csrf_token_cookie
-      echo csrf_token_header
-      Error(wisp.response(403))
-    }
-    True -> {
-      echo "csrf check PASSED!!!"
-      Ok(handle_request(req))
-    }
-    //     case auth.verify_csrf_token(session_entity, csrf_token_header) {
-    //       auth.Passed -> Ok(handle_request(req))
-    //       auth.Failed -> Error(wisp.response(403))
-    //     }
+  case csrf_token_cookie.v == csrf_token_header {
+    False -> Error(wisp.response(403))
+    True -> Ok(handle_request(req))
   }
 }

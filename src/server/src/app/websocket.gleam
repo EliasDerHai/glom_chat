@@ -1,6 +1,7 @@
 import app/domain/session
 import app/persist/pool.{type DbPool}
 import app/registry.{type RegistryMessage, Register, Unregister}
+import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
 import gleam/erlang/process
@@ -9,6 +10,7 @@ import gleam/option
 import gleam/otp/actor
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
+import wisp
 import youid/uuid.{type Uuid}
 
 pub type WsState {
@@ -24,12 +26,17 @@ pub fn handle_ws_request(
     mist.websocket(
       request: mist_req,
       on_init: fn(conn) {
-        let assert Ok(session) =
-          session.get_session_from_mist_req(
+        let cookie_extractor = fn() {
+          cookie.get_cookie_from_mist_request(
             mist_req,
-            db,
+            "session_id",
+            wisp.Signed,
             bit_array.from_string(secret_key),
           )
+        }
+
+        let assert Ok(session) =
+          session.get_session_from_cookie(db, cookie_extractor)
           as "could not extract session from ws-handshake"
 
         // Send a message to the registry to add this connection

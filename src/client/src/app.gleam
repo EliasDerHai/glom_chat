@@ -152,10 +152,6 @@ fn search_usernames(value: String) -> Effect(Msg) {
         None -> ""
       }
 
-      // TODO: cleanup log
-      echo "csrf_token"
-      echo csrf_token
-
       request
       |> request.set_method(http.Post)
       |> request.set_header("content-type", "application/json")

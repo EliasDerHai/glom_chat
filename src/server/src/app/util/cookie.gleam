@@ -1,3 +1,4 @@
+import app/util/mist_request
 import gleam/bit_array
 import gleam/crypto
 import gleam/http
@@ -8,38 +9,8 @@ import gleam/option
 import gleam/result
 import wisp.{type Response}
 
-pub fn get_cookie_from_header(
-  headers: List(http.Header),
-  cookie_name: String,
-  security: wisp.Security,
-  secret: BitArray,
-) -> Result(String, Nil) {
-  use value <- result.try(
-    headers
-    |> list.filter_map(fn(header) {
-      let #(name, value) = header
-      case name {
-        "cookie" -> Ok(cookie.parse(value))
-        _ -> Error(Nil)
-      }
-    })
-    |> list.flatten()
-    |> list.key_find(cookie_name),
-  )
-
-  echo #(value, security)
-
-  //  use value <- result.try(
-  case security {
-    wisp.PlainText -> Ok(value)
-    // bit_array.base64_decode(value)
-    wisp.Signed ->
-      crypto.verify_signed_message(value, secret)
-      |> result.map(bit_array.to_string)
-      |> result.flatten
-  }
-  //)
-  //value 
+pub type Cookie {
+  Cookie(v: String)
 }
 
 pub fn set_cookie_with_domain(
@@ -47,21 +18,73 @@ pub fn set_cookie_with_domain(
   name: String,
   value: String,
   max_age: Int,
-  _http_only: Bool,
+  http_only: Bool,
 ) -> Response {
   let attributes =
     cookie.Attributes(
       max_age: option.Some(max_age),
       domain: option.Some("localhost"),
-      // Explicit localhost domain for cross-port access
       path: option.Some("/"),
       secure: False,
-      // False for development on localhost
-      http_only: False,
+      http_only: http_only,
       same_site: option.Some(cookie.Lax),
     )
 
-  let cookie_header_value = cookie.set_header(name, value, attributes)
+  response
+  |> response.prepend_header(
+    "set-cookie",
+    cookie.set_header(name, value, attributes),
+  )
+}
 
-  response.prepend_header(response, "set-cookie", cookie_header_value)
+fn get_cookie_from_headers(
+  headers: List(http.Header),
+  cookie_name: String,
+  security: wisp.Security,
+  secret: BitArray,
+) -> Result(Cookie, Nil) {
+  use value <- result.try(
+    headers
+    |> list.filter_map(fn(header) {
+      case header {
+        #("cookie", value) -> Ok(cookie.parse(value))
+        _ -> Error(Nil)
+      }
+    })
+    |> list.flatten()
+    |> list.key_find(cookie_name),
+  )
+
+  case security {
+    wisp.PlainText -> value |> Cookie |> Ok
+    wisp.Signed ->
+      crypto.verify_signed_message(value, secret)
+      |> result.map(bit_array.to_string)
+      |> result.flatten
+      |> result.map(Cookie)
+  }
+}
+
+// TODO: 
+// remove workaround once websockets are implemented in wisp
+// see: https://github.com/gleam-wisp/wisp/issues/10
+
+// For wisp requests (HTTP)
+pub fn get_cookie_from_wisp_request(
+  request: wisp.Request,
+  cookie_name: String,
+  security: wisp.Security,
+) -> Result(Cookie, Nil) {
+  let secret = <<wisp.get_secret_key_base(request):utf8>>
+  get_cookie_from_headers(request.headers, cookie_name, security, secret)
+}
+
+// For mist requests (WebSocket)
+pub fn get_cookie_from_mist_request(
+  request: mist_request.MistRequest,
+  cookie_name: String,
+  security: wisp.Security,
+  secret: BitArray,
+) -> Result(Cookie, Nil) {
+  get_cookie_from_headers(request.headers, cookie_name, security, secret)
 }

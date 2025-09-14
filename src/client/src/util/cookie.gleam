@@ -11,7 +11,6 @@ pub fn get_cookie(name: String) -> Option(String) {
   |> list.map(string.trim)
   |> list.filter_map(fn(raw) { string.split_once(raw, "=") })
   |> list.find_map(fn(cookie_pair) {
-    echo cookie_pair
     let #(key, value) = cookie_pair
     case key == name {
       False -> Error(Nil)
