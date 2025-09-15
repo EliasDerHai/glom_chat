@@ -1,0 +1,20 @@
+# Build artifacts
+build/
+.gleam/
+
+# Dependencies
+deps/
+
+# Development files
+.env*
+.git/
+scripts/
+README.md
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
