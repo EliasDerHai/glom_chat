@@ -23,12 +23,8 @@ services:
       context: .
       dockerfile: src/server/Dockerfile
     container_name: glom-chat-backend
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/glom_chat
-      PORT: 8000
-      SECRET_KEY: development-secret-key-change-in-production-must-be-64-chars-long
-      CORS_ORIGINS: http://localhost:1234,https://localhost:1234
-      ENVIRONMENT: docker
+    env_file:
+      - src/server/.env.docker
     ports:
       - "8000:8000"
     depends_on:
