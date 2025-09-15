@@ -2,8 +2,6 @@ import dot_env
 import dot_env/env
 import gleam/int
 import gleam/io
-import gleam/option
-import gleam/result
 import gleam/string
 import wisp
 
@@ -45,7 +43,7 @@ pub fn get_server_port() -> Int {
 }
 
 fn get_string_or(key: String, fallback: String) -> String {
-  let key = key |> string.capitalise
+  let key = key |> string.uppercase
   case env.get_string(key) {
     Ok(v) -> v
     Error(_) -> {
@@ -56,7 +54,7 @@ fn get_string_or(key: String, fallback: String) -> String {
 }
 
 fn get_int_or(key: String, fallback: Int) -> Int {
-  let key = key |> string.capitalise
+  let key = key |> string.uppercase
   case env.get_int(key) {
     Ok(v) -> v
     Error(e) -> {

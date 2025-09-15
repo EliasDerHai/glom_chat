@@ -14,6 +14,7 @@ FROM erlang:27.1.1.0-alpine
 RUN apk add --no-cache postgresql-client
 RUN addgroup --system webapp && adduser --system webapp -g webapp
 COPY --from=build /build/server/build/erlang-shipment /app
+COPY --from=build /build/server/priv /app/priv
 RUN chown -R webapp:webapp /app
 USER webapp
 WORKDIR /app
