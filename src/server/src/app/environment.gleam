@@ -1,6 +1,10 @@
 import dot_env
 import dot_env/env
+import gleam/int
 import gleam/io
+import gleam/option
+import gleam/result
+import gleam/string
 import wisp
 
 /// Only loads .env file if DATABASE_URL is not already set
@@ -25,9 +29,41 @@ pub fn get_secret() -> String {
     Ok(secret) -> secret
     Error(_) -> {
       io.println(
-        "SERVER_SECRET not found in .env - fallback to random secret (active sessions can't be used after server restart)",
+        "SERVER_SECRET not found - fallback to random secret (active sessions can't be used after server restart)",
       )
       wisp.random_string(64)
+    }
+  }
+}
+
+pub fn get_server_host() -> String {
+  get_string_or("SERVER_HOST", "127.0.0.1")
+}
+
+pub fn get_server_port() -> Int {
+  get_int_or("SERVER_PORT", 8000)
+}
+
+fn get_string_or(key: String, fallback: String) -> String {
+  let key = key |> string.capitalise
+  case env.get_string(key) {
+    Ok(v) -> v
+    Error(_) -> {
+      io.println(key <> " not found - fallback to " <> fallback)
+      fallback
+    }
+  }
+}
+
+fn get_int_or(key: String, fallback: Int) -> Int {
+  let key = key |> string.capitalise
+  case env.get_int(key) {
+    Ok(v) -> v
+    Error(e) -> {
+      io.println(
+        key <> ":" <> e <> " - fallback to " <> fallback |> int.to_string,
+      )
+      fallback
     }
   }
 }

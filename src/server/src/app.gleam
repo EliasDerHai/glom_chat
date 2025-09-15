@@ -22,6 +22,9 @@ pub fn main() {
   let db = pool.init()
   let socket_registry = registry.init()
 
+  let server_host = environment.get_server_host()
+  let server_port = environment.get_server_port()
+
   let assert Ok(_) =
     fn(req: MistRequest) {
       case request.path_segments(req) {
@@ -31,7 +34,8 @@ pub fn main() {
       }
     }
     |> mist.new
-    |> mist.port(8000)
+    |> mist.port(server_port)
+    |> mist.bind(server_host)
     |> mist.start
 
   // The web server runs in new Erlang process, so put this one to sleep while
