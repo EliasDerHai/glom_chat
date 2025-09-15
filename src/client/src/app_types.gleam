@@ -1,9 +1,11 @@
+import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
+import shared_chat.{type ChatMessage}
 import shared_session.{type SessionDto}
-import shared_user.{type UserMiniDto}
+import shared_user.{type UserId, type UserMiniDto}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -32,6 +34,8 @@ pub type LoginState {
     user: SessionDto,
     web_socket: SocketState,
     new_conversation: Option(NewConversation),
+    selected_conversation: Option(UserMiniDto),
+    conversations: Dict(UserId, List(ChatMessage(shared_user.UserId))),
   )
 }
 
@@ -60,4 +64,5 @@ pub type NewConversationMsg {
   UserModalClose
   UserSearchInputChange(String)
   ApiSearchResponse(Result(List(UserMiniDto), rsvp.Error))
+  UserConversationPartnerSelect(UserMiniDto)
 }

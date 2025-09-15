@@ -267,7 +267,7 @@ pub fn me(req: Request, db: DbPool, session: SessionEntity) -> Response {
         |> shared_session.to_json
         |> json.to_string
 
-      wisp.json_body(wisp.ok(), body)
+      wisp.json_response(body, 200)
     }
   }
 }

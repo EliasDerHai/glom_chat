@@ -8,7 +8,7 @@ import wisp
 /// Only loads .env file if DATABASE_URL is not already set
 /// This allows using env vars set by docker-compose
 pub fn load_dot_env() -> Nil {
-  case env.get_string("DATABASE_URL") {
+  case env.get_string("SERVER_SECRET") {
     Ok(_) -> {
       io.println("Environment variables already set - skipping .env file")
     }

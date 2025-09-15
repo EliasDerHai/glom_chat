@@ -122,6 +122,64 @@ pub fn delete_user(
   |> pog.execute(db)
 }
 
+/// A row you get from running the `select_chat_messages_by_sender_id_or_receiver_id` query
+/// defined in `./src/app/persist/sql/select_chat_messages_by_sender_id_or_receiver_id.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.4.1 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectChatMessagesBySenderIdOrReceiverIdRow {
+  SelectChatMessagesBySenderIdOrReceiverIdRow(
+    id: Uuid,
+    sender_id: Uuid,
+    receiver_id: Uuid,
+    delivery: ChatMessageDelivery,
+    text_content: List(String),
+    created_at: Timestamp,
+    updated_at: Timestamp,
+  )
+}
+
+/// Runs the `select_chat_messages_by_sender_id_or_receiver_id` query
+/// defined in `./src/app/persist/sql/select_chat_messages_by_sender_id_or_receiver_id.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_chat_messages_by_sender_id_or_receiver_id(
+  db: pog.Connection,
+  arg_1: Uuid,
+) -> Result(
+  pog.Returned(SelectChatMessagesBySenderIdOrReceiverIdRow),
+  pog.QueryError,
+) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    use sender_id <- decode.field(1, uuid_decoder())
+    use receiver_id <- decode.field(2, uuid_decoder())
+    use delivery <- decode.field(3, chat_message_delivery_decoder())
+    use text_content <- decode.field(4, decode.list(decode.string))
+    use created_at <- decode.field(5, pog.timestamp_decoder())
+    use updated_at <- decode.field(6, pog.timestamp_decoder())
+    decode.success(SelectChatMessagesBySenderIdOrReceiverIdRow(
+      id:,
+      sender_id:,
+      receiver_id:,
+      delivery:,
+      text_content:,
+      created_at:,
+      updated_at:,
+    ))
+  }
+
+  "SELECT * FROM chat_messages WHERE sender_id = $1 or receiver_id = $1 ORDER BY created_at;
+"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_session_by_id` query
 /// defined in `./src/app/persist/sql/select_session_by_id.sql`.
 ///
@@ -429,6 +487,29 @@ LIMIT $2;
   |> pog.parameter(pog.int(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
+}
+
+// --- Enums -------------------------------------------------------------------
+
+/// Corresponds to the Postgres `chat_message_delivery` enum.
+///
+/// > 🐿️ This type definition was generated automatically using v4.4.1 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type ChatMessageDelivery {
+  Read
+  Delivered
+  Sent
+}
+
+fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
+  use chat_message_delivery <- decode.then(decode.string)
+  case chat_message_delivery {
+    "read" -> decode.success(Read)
+    "delivered" -> decode.success(Delivered)
+    "sent" -> decode.success(Sent)
+    _ -> decode.failure(Read, "ChatMessageDelivery")
+  }
 }
 
 // --- Encoding/decoding utils -------------------------------------------------

@@ -36,25 +36,35 @@ pub fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
 /// deriving socket-conn-lost info directly from model
 /// error toast shows after 5 sec without socket conn
 pub fn toast_incl_socket_disconnet(model: Model) {
+  let toasts_without_socket_error =
+    list.filter(model.global_state.toasts, fn(toast_msg) {
+      !string.starts_with(toast_msg.content, "Socket connection lost")
+    })
+
   case model.app_state {
-    LoggedIn(LoginState(_, Pending(since), _)) -> {
-      case
-        timestamp.compare(
-          since |> timestamp.add(duration.seconds(5)),
-          timestamp.system_time(),
-        )
-      {
-        order.Gt ->
-          toast.add_toast(
-            model.global_state.toasts,
-            toast.create_error_toast("Socket connection lost - reconnecting..."),
-          )
-        _ -> model.global_state.toasts
+    LoggedIn(login_state) -> {
+      case login_state.web_socket {
+        Pending(since:) ->
+          case
+            timestamp.compare(
+              since |> timestamp.add(duration.seconds(5)),
+              timestamp.system_time(),
+            )
+          {
+            order.Gt ->
+              toast.add_toast(
+                model.global_state.toasts,
+                toast.create_error_toast(
+                  "Socket connection lost - reconnecting...",
+                ),
+              )
+            _ -> toasts_without_socket_error
+          }
+        app_types.Established(_) -> toasts_without_socket_error
       }
     }
-    _ ->
-      list.filter(model.global_state.toasts, fn(toast_msg) {
-        !string.starts_with(toast_msg.content, "Socket connection lost")
-      })
+    _ -> {
+      toasts_without_socket_error
+    }
   }
 }

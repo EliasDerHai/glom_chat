@@ -2,9 +2,11 @@ import app_types.{
   type LoginState, type Model, type Msg, type NewConversation, ApiSearchResponse,
   CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
   Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
-  ShowToast, UserModalClose, UserModalOpen, UserSearchInputChange, WsWrapper,
+  ShowToast, UserConversationPartnerSelect, UserModalClose, UserModalOpen,
+  UserSearchInputChange, WsWrapper,
 }
 import endpoints
+import gleam/dict
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
@@ -68,10 +70,19 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   let login = fn(session_dto) {
     #(
       Model(
-        LoggedIn(LoginState(session_dto, Pending(timestamp.system_time()), None)),
+        LoggedIn(LoginState(
+          session_dto,
+          Pending(timestamp.system_time()),
+          None,
+          None,
+          dict.new(),
+        )),
         model.global_state,
       ),
-      ws.init(endpoints.socket_address(), WsWrapper),
+      effect.batch([
+        ws.init(endpoints.socket_address(), WsWrapper),
+        // TODO: load conversations
+      ]),
     )
   }
 
@@ -108,21 +119,44 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           login_state.new_conversation,
           search_usernames(v),
         )
-        ApiSearchResponse(r) -> {
-          case r {
-            Error(_) -> {
-              // TODO: add toast for failed request? 
-              // echo e
-              #(login_state.new_conversation, effect.none())
+        ApiSearchResponse(Ok(list)) -> #(
+          Some(NewConversation(list)),
+          effect.none(),
+        )
+        ApiSearchResponse(Error(_)) -> #(
+          login_state.new_conversation,
+          effect.none(),
+        )
+        UserConversationPartnerSelect(_) -> #(None, effect.none())
+      }
+
+      let #(selected_conversation, conversations) = case msg {
+        // TODO: add toast for failed request, but how to do conveniently? 
+        // this scope kind off has to return a NewConversation but the toasts are in GlobalState
+        // maybe we can produce an effect rather than immediately update the model in this update cycle? 
+        ApiSearchResponse(Error(e)) -> todo as "impl toasting as effect"
+        UserConversationPartnerSelect(dto) -> #(
+          Some(dto),
+          dict.upsert(login_state.conversations, dto.id, fn(curr) {
+            case curr {
+              None -> []
+              Some(chat_messages) -> chat_messages
             }
-            Ok(list) -> #(Some(NewConversation(list)), effect.none())
-          }
-        }
+          }),
+        )
+        _ -> #(login_state.selected_conversation, login_state.conversations)
       }
 
       #(
         Model(
-          LoggedIn(LoginState(..login_state, new_conversation:)),
+          LoggedIn(
+            LoginState(
+              ..login_state,
+              new_conversation:,
+              selected_conversation:,
+              conversations:,
+            ),
+          ),
           model.global_state,
         ),
         effect,
@@ -233,7 +267,8 @@ fn view(model: Model) -> Element(Msg) {
 }
 
 fn view_chat(model: LoginState) -> Element(Msg) {
-  let LoginState(session, _, new_conv) = model
+  let LoginState(session, _, new_conv, selected_conversation, conversations) =
+    model
 
   html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
     // Sidebar
@@ -293,7 +328,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             class(
               "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
             ),
-            placeholder("UserModalCloseyour message..."),
+            placeholder("Message..."),
           ]),
           html.button(
             [
@@ -360,10 +395,22 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
                 dtos ->
                   html.div(
                     [],
-                    list.map(dtos, fn(dto) {
-                      html.p([class("text-gray-500")], [
-                        html.text(dto.username.v),
-                      ])
+                    list.map(dtos, fn(dto: shared_user.UserMiniDto) {
+                      html.button(
+                        [
+                          class(
+                            "flex items-center gap-1 p-4 hover:bg-gray-100 cursor-pointer w-full",
+                          ),
+                          event.on_click(
+                            dto
+                            |> UserConversationPartnerSelect
+                            |> NewConversationMsg,
+                          ),
+                        ],
+                        [
+                          html.text(dto.username.v),
+                        ],
+                      )
                     }),
                   )
               },

@@ -1,4 +1,5 @@
 import app/auth
+import app/domain/chat
 import app/domain/session
 import app/domain/user
 import app/environment
@@ -60,6 +61,7 @@ fn validate_and_handle_requests(req, db) {
     ["auth", "logout"] -> session.logout(req, db)
     ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
+    ["chats", id] -> chat.chats(req, db, id)
 
     _ -> wisp.not_found()
   }
