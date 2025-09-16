@@ -3,7 +3,7 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
-import shared_chat.{type ChatMessage}
+import shared_chat.{type ChatMessage, type ChatMessageDelivery}
 import shared_session.{type SessionDto}
 import shared_user.{type UserId, type UserMiniDto}
 import util/toast.{type Toast}
@@ -31,13 +31,16 @@ pub type GlobalState {
 
 pub type LoginState {
   LoginState(
-    user: SessionDto,
+    session: SessionDto,
     web_socket: SocketState,
     new_conversation: Option(NewConversation),
     selected_conversation: Option(UserMiniDto),
-    conversations: Dict(UserId, List(ChatMessage(shared_user.UserId))),
+    conversations: Dict(UserMiniDto, List(ClientChatMessage)),
   )
 }
+
+pub type ClientChatMessage =
+  ChatMessage(UserId, ChatMessageDelivery)
 
 pub type NewConversation {
   NewConversation(suggestions: List(UserMiniDto))
@@ -57,6 +60,7 @@ pub type Msg {
   WsWrapper(WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
   NewConversationMsg(NewConversationMsg)
+  UserSendMessage
 }
 
 pub type NewConversationMsg {

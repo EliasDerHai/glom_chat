@@ -1,3 +1,4 @@
+import gleam/io
 import gleam/json
 import gleam/option
 import gleam/time/timestamp
@@ -7,6 +8,21 @@ import shared_user.{UserDto, UserId}
 
 pub fn main() -> Nil {
   gleeunit.main()
+}
+
+// this compare circumvents a treesitter issue in my setup 
+// https://github.com/gleam-lang/tree-sitter-gleam/issues/121#issuecomment-3259598900
+pub fn assert_equal(expected: a, actual: a) -> Nil {
+  case expected == actual {
+    False -> {
+      io.println("Expected:")
+      echo expected
+      io.println("Actual:")
+      echo actual
+      panic as "Don't equal"
+    }
+    True -> Nil
+  }
 }
 
 pub fn user_json_roundtrip_test() {
@@ -23,14 +39,14 @@ pub fn user_json_roundtrip_test() {
   let actual = input |> shared_user.to_json()
 
   // assert serialize
-  let expectation =
+  let expected =
     json.object([
       #("id", json.string("9c5b94b1-35ad-49bb-b118-8e8fc24abf80")),
       #("username", json.string("John")),
       #("email", json.string("john.boy@gleamer.com")),
       #("email_verified", json.bool(False)),
     ])
-  assert expectation == actual
+  assert_equal(expected, actual)
 
   // act deserialize
   let json_text = json.to_string(actual)
@@ -38,7 +54,7 @@ pub fn user_json_roundtrip_test() {
     json.parse(from: json_text, using: shared_user.decode_user_dto())
 
   // assert deserialize
-  assert input == actual
+  assert_equal(input, actual)
 }
 
 pub fn chat_message_json_roundtrip_test() {
@@ -56,7 +72,7 @@ pub fn chat_message_json_roundtrip_test() {
   let actual = input |> shared_chat.chat_message_to_json()
 
   // assert serialize
-  let expectation =
+  let expected =
     json.object([
       #("sender", json.string("9c5b94b1-35ad-49bb-b118-8e8fc24abf80")),
       #("receiver", json.string("7d4a83c2-26bd-48aa-a007-9f9ec35bcf91")),
@@ -64,7 +80,7 @@ pub fn chat_message_json_roundtrip_test() {
       #("sent_time", json.int(1_692_859_999)),
       #("text_content", json.array(["Hello", "How are you?"], json.string)),
     ])
-  assert expectation == actual
+  assert_equal(expected, actual)
 
   // act deserialize
   let json_text = json.to_string(actual)
@@ -72,7 +88,7 @@ pub fn chat_message_json_roundtrip_test() {
     json.parse(from: json_text, using: shared_chat.chat_message_decoder())
 
   // assert deserialize
-  assert input == actual
+  assert_equal(input, actual)
 }
 
 pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
@@ -90,7 +106,7 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
   let actual = input |> shared_chat.chat_message_to_json()
 
   // assert serialize
-  let expectation =
+  let expected =
     json.object([
       #("sender", json.string("sender-id")),
       #("receiver", json.string("receiver-id")),
@@ -98,7 +114,7 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
       #("sent_time", json.null()),
       #("text_content", json.array(["Draft message"], json.string)),
     ])
-  assert expectation == actual
+  assert_equal(expected, actual)
 
   // act deserialize
   let json_text = json.to_string(actual)
@@ -106,5 +122,5 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
     json.parse(from: json_text, using: shared_chat.chat_message_decoder())
 
   // assert deserialize
-  assert input == actual
+  assert_equal(input, actual)
 }

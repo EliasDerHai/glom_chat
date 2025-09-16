@@ -5,13 +5,13 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import shared_user.{type UserId, UserId}
 
-pub type ChatMessage(user_id) {
+pub type ChatMessage(user_id, chat_message_delivery) {
   ChatMessage(
     /// user_id
     sender: user_id,
     /// username
     receiver: user_id,
-    delivery: ChatMessageDelivery,
+    delivery: chat_message_delivery,
     /// utc when server received (sent) message
     sent_time: Option(Timestamp),
     /// `\n` is splitted to allow delimiter agnostic newlines
@@ -56,7 +56,9 @@ fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
   }
 }
 
-pub fn chat_message_to_json(chat_message: ChatMessage(UserId)) -> Json {
+pub fn chat_message_to_json(
+  chat_message: ChatMessage(UserId, ChatMessageDelivery),
+) -> Json {
   let ChatMessage(sender:, receiver:, delivery:, sent_time:, text_content:) =
     chat_message
   json.object([
@@ -75,7 +77,9 @@ pub fn chat_message_to_json(chat_message: ChatMessage(UserId)) -> Json {
   ])
 }
 
-pub fn chat_message_decoder() -> decode.Decoder(ChatMessage(UserId)) {
+pub fn chat_message_decoder() -> decode.Decoder(
+  ChatMessage(UserId, ChatMessageDelivery),
+) {
   use sender <- decode.field("sender", decode.string)
   use receiver <- decode.field("receiver", decode.string)
   use delivery <- decode.field("delivery", chat_message_delivery_decoder())

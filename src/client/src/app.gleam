@@ -14,6 +14,8 @@ import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/order
+import gleam/result
 import gleam/string
 import gleam/time/timestamp
 import lustre
@@ -25,8 +27,10 @@ import lustre/event
 import lustre_websocket as ws
 import pre_login
 import rsvp
+import shared_chat
 import shared_session
 import shared_user
+import util/button
 import util/cookie
 import util/icons
 import util/toast
@@ -113,14 +117,20 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         as "must be logged in at this point"
 
       let #(new_conversation, effect) = case msg {
-        UserModalOpen -> #(Some(NewConversation([])), effect.none())
+        UserModalOpen -> #(Some(NewConversation([])), search_usernames(""))
         UserModalClose -> #(None, effect.none())
         UserSearchInputChange(v) -> #(
           login_state.new_conversation,
           search_usernames(v),
         )
-        ApiSearchResponse(Ok(list)) -> #(
-          Some(NewConversation(list)),
+        ApiSearchResponse(Ok(items)) -> #(
+          Some(
+            NewConversation(
+              list.filter(items, fn(item) {
+                item.id != login_state.session.user_id
+              }),
+            ),
+          ),
           effect.none(),
         )
         ApiSearchResponse(Error(_)) -> #(
@@ -130,21 +140,39 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         UserConversationPartnerSelect(_) -> #(None, effect.none())
       }
 
-      let #(selected_conversation, conversations) = case msg {
-        // TODO: add toast for failed request, but how to do conveniently? 
-        // this scope kind off has to return a NewConversation but the toasts are in GlobalState
-        // maybe we can produce an effect rather than immediately update the model in this update cycle? 
-        ApiSearchResponse(Error(e)) -> todo as "impl toasting as effect"
-        UserConversationPartnerSelect(dto) -> #(
-          Some(dto),
-          dict.upsert(login_state.conversations, dto.id, fn(curr) {
-            case curr {
-              None -> []
-              Some(chat_messages) -> chat_messages
-            }
-          }),
+      let #(selected_conversation, conversations, additional_effect) = case
+        msg
+      {
+        ApiSearchResponse(Error(_)) -> {
+          let toast_effect =
+            effect.from(fn(dispatch) {
+              dispatch(
+                ShowToast(toast.create_error_toast("Failed to search users")),
+              )
+            })
+
+          #(
+            login_state.selected_conversation,
+            login_state.conversations,
+            toast_effect,
+          )
+        }
+        UserConversationPartnerSelect(dto) -> {
+          let next_conversations =
+            dict.upsert(login_state.conversations, dto, fn(curr) {
+              case curr {
+                None -> []
+                Some(chat_messages) -> chat_messages
+              }
+            })
+
+          #(Some(dto), next_conversations, effect.none())
+        }
+        _ -> #(
+          login_state.selected_conversation,
+          login_state.conversations,
+          effect.none(),
         )
-        _ -> #(login_state.selected_conversation, login_state.conversations)
       }
 
       #(
@@ -159,9 +187,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           ),
           model.global_state,
         ),
-        effect,
+        effect.batch([effect, additional_effect]),
       )
     }
+    app_types.UserSendMessage -> todo as "great chat much wow..."
   }
 }
 
@@ -300,10 +329,22 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             html.text("New conversation"),
           ],
         ),
-        // Placeholder for chat list items
-        html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
-          html.text("Chat with User A"),
-        ]),
+        ..conversations
+        |> dict.to_list
+        |> list.sort(fn(left, right) {
+          order.break_tie(
+            timestamp.compare(
+              latest_message_time(left.1),
+              latest_message_time(right.1),
+            ),
+            string.compare({ left.0 }.username.v, { right.0 }.username.v),
+          )
+        })
+        |> list.map(fn(conversation) {
+          html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
+            html.text({ conversation.0 }.username.v),
+          ])
+        })
       ]),
     ]),
 
@@ -318,7 +359,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
 
       // Chat messages area
       html.main([class("flex-1 p-4 overflow-y-auto")], [
-        html.p([], [html.text("Chat messages will appear here.")]),
+        html.p([], [html.text("Select a friend to start chatting...")]),
       ]),
 
       // Message input area
@@ -326,15 +367,22 @@ fn view_chat(model: LoginState) -> Element(Msg) {
         html.div([class("flex")], [
           html.input([
             class(
-              "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+              "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 "
+              <> "disabled:bg-gray-100 ",
             ),
+            attribute.disabled(selected_conversation |> option.is_none),
             placeholder("Message..."),
           ]),
+
           html.button(
             [
               class(
-                "bg-blue-600 text-white font-semibold py-2 px-4 rounded-r-md transition-colors hover:bg-blue-700",
+                "bg-blue-600 text-white font-semibold py-2 px-4 rounded-r-md transition-colors"
+                |> button.default_disabled_class
+                |> button.default_hovered_class,
               ),
+              attribute.disabled(selected_conversation |> option.is_none),
+              event.on_click(app_types.UserSendMessage),
             ],
             [html.text("Send")],
           ),
@@ -420,4 +468,15 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
       ],
     ),
   ])
+}
+
+fn latest_message_time(
+  messages: List(app_types.ClientChatMessage),
+) -> timestamp.Timestamp {
+  messages
+  |> list.first
+  |> result.map(fn(msg) {
+    option.unwrap(msg.sent_time, timestamp.from_unix_seconds(0))
+  })
+  |> result.unwrap(timestamp.from_unix_seconds(0))
 }
