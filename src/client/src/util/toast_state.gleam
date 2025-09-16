@@ -1,6 +1,5 @@
 import app_types.{
-  type Model, type Msg, GlobalState, LoggedIn, LoginState, Model, Pending,
-  RemoveToast,
+  type Model, type Msg, GlobalState, LoggedIn, Model, Pending, RemoveToast,
 }
 import gleam/list
 import gleam/order

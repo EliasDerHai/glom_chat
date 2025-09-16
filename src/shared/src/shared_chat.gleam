@@ -5,6 +5,9 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import shared_user.{type UserId, UserId}
 
+pub type ClientChatMessage =
+  ChatMessage(UserId, ChatMessageDelivery)
+
 pub type ChatMessage(user_id, chat_message_delivery) {
   ChatMessage(
     /// user_id

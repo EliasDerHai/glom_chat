@@ -1,10 +1,7 @@
 import endpoints
 import gleam/bool
 import gleam/dynamic/decode
-import gleam/http
-import gleam/http/request
 import gleam/int
-import gleam/json
 import gleam/list
 import gleam/option
 import lustre
@@ -452,12 +449,9 @@ fn view(model: PreLoginState) -> Element(PreLoginMsg) {
 
 fn send_signup_req(
   signup_details: SignupDetails,
-  on_response handle_response: fn(Result(UserDto, rsvp.Error)) -> PreLoginMsg,
+  effect: fn(Result(UserDto, rsvp.Error)) -> PreLoginMsg,
 ) -> Effect(PreLoginMsg) {
-  let url = endpoints.users()
-  let handler = rsvp.expect_json(shared_user.decode_user_dto(), handle_response)
-
-  let create =
+  let json_body =
     CreateUserDto(
       signup_details.username.value
         |> form.get_form_field_value_as_string
@@ -465,46 +459,33 @@ fn send_signup_req(
       signup_details.email.value |> form.get_form_field_value_as_string,
       signup_details.password.value |> form.get_form_field_value_as_string,
     )
+    |> shared_user.create_user_dto_to_json
 
-  case request.to(url) {
-    Ok(request) ->
-      request
-      |> request.set_method(http.Post)
-      |> request.set_header("content-type", "application/json")
-      |> request.set_body(json.to_string(
-        create |> shared_user.create_user_dto_to_json,
-      ))
-      |> rsvp.send(handler)
-
-    Error(_) -> panic as { "Failed to create request to " <> url }
-  }
+  endpoints.post_request(
+    endpoints.users(),
+    json_body,
+    shared_user.decode_user_dto(),
+    effect,
+  )
 }
 
 fn send_login_req(
   login_details: LoginDetails,
-  on_response handle_response: fn(Result(SessionDto, rsvp.Error)) -> PreLoginMsg,
+  effect: fn(Result(SessionDto, rsvp.Error)) -> PreLoginMsg,
 ) -> Effect(PreLoginMsg) {
-  let url = endpoints.login()
-  let handler = rsvp.expect_json(shared_session.decode_dto(), handle_response)
-
-  let create =
+  let json_body =
     shared_user.UserLoginDto(
       login_details.username.value |> form.get_form_field_value_as_string,
       login_details.password.value |> form.get_form_field_value_as_string,
     )
+    |> shared_user.user_loging_dto_to_json
 
-  case request.to(url) {
-    Ok(request) ->
-      request
-      |> request.set_method(http.Post)
-      |> request.set_header("content-type", "application/json")
-      |> request.set_body(
-        create |> shared_user.user_loging_dto_to_json |> json.to_string,
-      )
-      |> rsvp.send(handler)
-
-    Error(_) -> panic as { "Failed to create request to " <> url }
-  }
+  endpoints.post_request(
+    endpoints.login(),
+    json_body,
+    shared_session.decode_dto(),
+    effect,
+  )
 }
 
 // VIEW -----------------------------------------------------------------------

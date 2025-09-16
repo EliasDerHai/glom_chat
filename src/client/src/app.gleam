@@ -1,17 +1,15 @@
 import app_types.{
-  type LoginState, type Model, type Msg, type NewConversation, ApiSearchResponse,
+  type LoginState, type Model, type Msg, type NewConversation,
+  type NewConversationMsg, ApiChatMessageResponse, ApiSearchResponse,
   CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
   Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
   ShowToast, UserConversationPartnerSelect, UserModalClose, UserModalOpen,
-  UserSearchInputChange, WsWrapper,
+  UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
 import endpoints
 import gleam/dict
 import gleam/dynamic/decode
-import gleam/http
-import gleam/http/request
 import gleam/io
-import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/order
@@ -26,12 +24,10 @@ import lustre/element/html
 import lustre/event
 import lustre_websocket as ws
 import pre_login
-import rsvp
-import shared_chat
+import shared_chat.{type ClientChatMessage}
 import shared_session
-import shared_user
+import shared_user.{Username, UsersByUsernameDto}
 import util/button
-import util/cookie
 import util/icons
 import util/toast
 import util/toast_state
@@ -55,16 +51,11 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
 }
 
 fn check_auth() -> Effect(Msg) {
-  let url = endpoints.me()
-  let handler = rsvp.expect_json(shared_session.decode_dto(), CheckedAuth)
-
-  case request.to(url) {
-    Ok(request) ->
-      request
-      |> request.set_method(http.Get)
-      |> rsvp.send(handler)
-    Error(_) -> panic as { "Failed to create request to " <> url }
-  }
+  endpoints.get_request(
+    endpoints.me(),
+    shared_session.decode_dto(),
+    CheckedAuth,
+  )
 }
 
 // UPDATE ----------------------------------------------------------------------
@@ -112,119 +103,132 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
 
     // ### CHAT ###
-    NewConversationMsg(msg) -> {
-      let assert LoggedIn(login_state) = model.app_state
-        as "must be logged in at this point"
-
-      let #(new_conversation, effect) = case msg {
-        UserModalOpen -> #(Some(NewConversation([])), search_usernames(""))
-        UserModalClose -> #(None, effect.none())
-        UserSearchInputChange(v) -> #(
-          login_state.new_conversation,
-          search_usernames(v),
-        )
-        ApiSearchResponse(Ok(items)) -> #(
-          Some(
-            NewConversation(
-              list.filter(items, fn(item) {
-                item.id != login_state.session.user_id
-              }),
-            ),
-          ),
-          effect.none(),
-        )
-        ApiSearchResponse(Error(_)) -> #(
-          login_state.new_conversation,
-          effect.none(),
-        )
-        UserConversationPartnerSelect(_) -> #(None, effect.none())
-      }
-
-      let #(selected_conversation, conversations, additional_effect) = case
-        msg
-      {
-        ApiSearchResponse(Error(_)) -> {
-          let toast_effect =
-            effect.from(fn(dispatch) {
-              dispatch(
-                ShowToast(toast.create_error_toast("Failed to search users")),
-              )
-            })
-
-          #(
-            login_state.selected_conversation,
-            login_state.conversations,
-            toast_effect,
-          )
-        }
-        UserConversationPartnerSelect(dto) -> {
-          let next_conversations =
-            dict.upsert(login_state.conversations, dto, fn(curr) {
-              case curr {
-                None -> []
-                Some(chat_messages) -> chat_messages
-              }
-            })
-
-          #(Some(dto), next_conversations, effect.none())
-        }
-        _ -> #(
-          login_state.selected_conversation,
-          login_state.conversations,
-          effect.none(),
-        )
-      }
-
-      #(
-        Model(
-          LoggedIn(
-            LoginState(
-              ..login_state,
-              new_conversation:,
-              selected_conversation:,
-              conversations:,
-            ),
-          ),
-          model.global_state,
-        ),
-        effect.batch([effect, additional_effect]),
-      )
-    }
-    app_types.UserSendMessage -> todo as "great chat much wow..."
+    NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
+    UserOnSendSubmit -> #(model, send_message(model))
+    // TODO: 
+    ApiChatMessageResponse(_) -> todo
   }
 }
 
-fn search_usernames(value: String) -> Effect(Msg) {
-  let url = endpoints.search_users()
-  let handler =
-    shared_user.decode_user_mini_dto()
-    |> decode.list
-    |> rsvp.expect_json(ApiSearchResponse)
+fn handle_new_conversation_msg(
+  model: Model,
+  msg: NewConversationMsg,
+) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
 
-  let body =
-    value
-    |> shared_user.Username
-    |> shared_user.UsersByUsernameDto
-    |> shared_user.users_by_username_dto_to_json
-    |> json.to_string
-
-  case request.to(url) {
-    Ok(request) -> {
-      let csrf_token = case cookie.get_cookie("csrf_token") {
-        Some(csrf_token) -> csrf_token
-        None -> ""
-      }
-
-      request
-      |> request.set_method(http.Post)
-      |> request.set_header("content-type", "application/json")
-      |> request.set_header("x-csrf-token", csrf_token)
-      |> request.set_body(body)
-      |> rsvp.send(handler)
-      |> effect.map(NewConversationMsg)
-    }
-    Error(_) -> panic as { "Failed to create request to " <> url }
+  let #(new_conversation, effect) = case msg {
+    UserModalOpen -> #(Some(NewConversation([])), search_usernames(""))
+    UserModalClose -> #(None, effect.none())
+    UserSearchInputChange(v) -> #(
+      login_state.new_conversation,
+      search_usernames(v),
+    )
+    ApiSearchResponse(Ok(items)) -> #(
+      Some(
+        NewConversation(
+          list.filter(items, fn(item) { item.id != login_state.session.user_id }),
+        ),
+      ),
+      effect.none(),
+    )
+    ApiSearchResponse(Error(_)) -> #(
+      login_state.new_conversation,
+      effect.none(),
+    )
+    UserConversationPartnerSelect(_) -> #(None, effect.none())
   }
+
+  let #(selected_conversation, conversations, additional_effect) = case msg {
+    ApiSearchResponse(Error(_)) -> {
+      let toast_effect =
+        effect.from(fn(dispatch) {
+          dispatch(
+            ShowToast(toast.create_error_toast("Failed to search users")),
+          )
+        })
+
+      #(
+        login_state.selected_conversation,
+        login_state.conversations,
+        toast_effect,
+      )
+    }
+    UserConversationPartnerSelect(dto) -> {
+      let next_conversations =
+        dict.upsert(login_state.conversations, dto, fn(curr) {
+          case curr {
+            None -> []
+            Some(chat_messages) -> chat_messages
+          }
+        })
+
+      #(Some(dto), next_conversations, effect.none())
+    }
+    _ -> #(
+      login_state.selected_conversation,
+      login_state.conversations,
+      effect.none(),
+    )
+  }
+
+  #(
+    Model(
+      LoggedIn(
+        LoginState(
+          ..login_state,
+          new_conversation:,
+          selected_conversation:,
+          conversations:,
+        ),
+      ),
+      model.global_state,
+    ),
+    effect.batch([effect, additional_effect]),
+  )
+}
+
+fn send_message(model: Model) -> Effect(Msg) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+
+  let assert Ok(draft) =
+    login_state.conversations
+    |> dict.to_list
+    |> list.find_map(fn(item) {
+      let #(user, messages) = item
+      case
+        option.Some({ user }.id)
+        == option.map(login_state.selected_conversation, fn(conv) { conv.id })
+      {
+        True ->
+          list.find(messages, fn(msg) { msg.delivery == shared_chat.Draft })
+        False -> Error(Nil)
+      }
+    })
+    as "shouldn't be allowed to send without draft msg"
+
+  endpoints.post_request(
+    endpoints.chats(),
+    draft |> shared_chat.chat_message_to_json,
+    shared_chat.chat_message_decoder(),
+    ApiChatMessageResponse,
+  )
+}
+
+fn search_usernames(value: String) -> Effect(Msg) {
+  let json_body =
+    value
+    |> Username
+    |> UsersByUsernameDto
+    |> shared_user.users_by_username_dto_to_json
+
+  endpoints.post_request(
+    endpoints.search_users(),
+    json_body,
+    decode.list(shared_user.decode_user_mini_dto()),
+    fn(r) { NewConversationMsg(ApiSearchResponse(r)) },
+  )
 }
 
 fn handle_socket_event(
@@ -382,7 +386,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
                 |> button.default_hovered_class,
               ),
               attribute.disabled(selected_conversation |> option.is_none),
-              event.on_click(app_types.UserSendMessage),
+              event.on_click(UserOnSendSubmit),
             ],
             [html.text("Send")],
           ),
@@ -470,9 +474,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
   ])
 }
 
-fn latest_message_time(
-  messages: List(app_types.ClientChatMessage),
-) -> timestamp.Timestamp {
+fn latest_message_time(messages: List(ClientChatMessage)) -> timestamp.Timestamp {
   messages
   |> list.first
   |> result.map(fn(msg) {

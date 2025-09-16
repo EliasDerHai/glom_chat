@@ -18,6 +18,10 @@ pub type UserId {
   UserId(v: Uuid)
 }
 
+pub fn to_shared_user_id(id: UserId) -> shared_user.UserId {
+  id.v |> uuid.to_string |> shared_user.UserId
+}
+
 // ################################################################################
 // Entity
 // ################################################################################
@@ -33,7 +37,7 @@ pub type UserEntity {
 
 pub fn to_dto(u: UserEntity) -> shared_user.UserDto {
   shared_user.UserDto(
-    u.id.v |> uuid.to_string |> shared_user.UserId,
+    u.id |> to_shared_user_id,
     u.username,
     u.email,
     u.email_verified,

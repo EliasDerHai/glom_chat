@@ -3,9 +3,9 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
-import shared_chat.{type ChatMessage, type ChatMessageDelivery}
+import shared_chat.{type ClientChatMessage}
 import shared_session.{type SessionDto}
-import shared_user.{type UserId, type UserMiniDto}
+import shared_user.{type UserMiniDto}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -39,9 +39,6 @@ pub type LoginState {
   )
 }
 
-pub type ClientChatMessage =
-  ChatMessage(UserId, ChatMessageDelivery)
-
 pub type NewConversation {
   NewConversation(suggestions: List(UserMiniDto))
 }
@@ -60,7 +57,8 @@ pub type Msg {
   WsWrapper(WebSocketEvent)
   CheckedAuth(Result(SessionDto, rsvp.Error))
   NewConversationMsg(NewConversationMsg)
-  UserSendMessage
+  UserOnSendSubmit
+  ApiChatMessageResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
 }
 
 pub type NewConversationMsg {
