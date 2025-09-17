@@ -75,8 +75,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         model.global_state,
       ),
       effect.batch([
-        ws.init(endpoints.socket_address(), WsWrapper),
-        // TODO: load conversations
+        // TODO: uncomment after fixing COOKIE policy
+      // ws.init(endpoints.socket_address(), WsWrapper),
+      // TODO: load conversations
       ]),
     )
   }
@@ -268,7 +269,9 @@ fn handle_socket_event(
             )
           #(
             Model(LoggedIn(updated_login_state), model.global_state),
-            ws.init(endpoints.socket_address(), WsWrapper),
+            // TODO: uncomment after fixing COOKIE policy
+            // ws.init(endpoints.socket_address(), WsWrapper),
+            effect.none(),
           )
         }
         _ -> #(model, effect.none())
