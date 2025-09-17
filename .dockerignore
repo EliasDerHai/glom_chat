@@ -1,0 +1,30 @@
+# Build artifacts
+**/build/
+
+# Development files
+**/.env*
+.git/
+scripts/
+README.md
+TODO.md
+CLAUDE.md
+docs/
+
+# Client-specific
+src/client/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# GitHub
+.github/
+
+# Docker files
+docker-compose.yml
+**/Dockerfile
+**/.dockerignore

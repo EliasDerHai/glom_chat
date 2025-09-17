@@ -21,7 +21,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: src/server/Dockerfile
+      dockerfile: Dockerfile
     container_name: glom-chat-backend
     env_file:
       - src/server/.env.docker
