@@ -2,6 +2,10 @@
 
 Learning gleam with a simple toy project ...
 
+## Live
+
+[Pages](https://eliasderhai.github.io/glom_chat/)
+
 ## Getting Started
 
 To set up your development environment, please run the setup script after cloning the repository. This will check for required dependencies and configure Git hooks for the project.

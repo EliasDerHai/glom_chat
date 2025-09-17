@@ -50,6 +50,7 @@ jobs:
         run: |
           gleam deps download
           gleam run -m lustre/dev build app --outdir=dist --minify=True
+          cp index.html dist/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
