@@ -26,9 +26,9 @@ pub fn set_cookie_with_domain(
       max_age: option.Some(max_age),
       domain: option.Some(environment.get_cookie_domain()),
       path: option.Some("/"),
-      secure: False,
+      secure: True,
       http_only: http_only,
-      same_site: option.Some(cookie.Lax),
+      same_site: option.Some(cookie.None),
     )
 
   response
