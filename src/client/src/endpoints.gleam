@@ -9,10 +9,15 @@ import util/cookie
 
 // CONSTS ------------------------------------------------------------------------
 
-// NOTE: 
+// NOTE:
 // lustre_http cannot handle relative paths like `/api/users` although they would get proxied by lustre dev-tools
 // https://codeberg.org/kero/lustre_http/issues/5#issuecomment-6894908
-const api = "http://localhost:1234/api/"
+
+@external(javascript, "./endpoints_ffi.mjs", "getApiUrl")
+fn get_api_url() -> String
+
+@external(javascript, "./endpoints_ffi.mjs", "getSocketUrl")
+fn get_socket_url() -> String
 
 pub fn me() {
   "auth/me" |> to_req
@@ -34,14 +39,13 @@ pub fn chats() {
   "chats" |> to_req
 }
 
-// TODO: configurable? can we proxy this also?
 pub fn socket_address() {
-  "ws://localhost:8000/ws"
+  get_socket_url()
 }
 
 // HELPER ------------------------------------------------------------------------
 fn to_req(sub_path: String) -> Request(String) {
-  let assert Ok(req) = { api <> sub_path } |> request.to()
+  let assert Ok(req) = { get_api_url() <> sub_path } |> request.to()
   req
 }
 
