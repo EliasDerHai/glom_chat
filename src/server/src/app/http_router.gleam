@@ -8,7 +8,7 @@ import app/persist/pool.{type DbPool}
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
-import gleam/http.{Get}
+import gleam/http.{Get, Options}
 import gleam/http/response
 import mist
 import wisp.{type Response}
@@ -27,6 +27,14 @@ pub fn handle_http_request(
 fn handle_request(req: wisp.Request, db: DbPool) -> Response {
   use req <- middleware.default_middleware(req)
 
+  // Handle CORS preflight requests
+  case req.method {
+    Options -> wisp.ok() |> wisp.string_body("")
+    _ -> handle_routes(req, db)
+  }
+}
+
+fn handle_routes(req: wisp.Request, db: DbPool) -> Response {
   case wisp.path_segments(req) {
     // Public endpoints - no validation needed
     [] -> simple_string_response(req, "hello")

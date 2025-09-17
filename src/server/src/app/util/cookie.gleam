@@ -1,3 +1,4 @@
+import app/environment
 import app/util/mist_request
 import gleam/bit_array
 import gleam/crypto
@@ -23,7 +24,7 @@ pub fn set_cookie_with_domain(
   let attributes =
     cookie.Attributes(
       max_age: option.Some(max_age),
-      domain: option.Some("localhost"),
+      domain: option.Some(environment.get_cookie_domain()),
       path: option.Some("/"),
       secure: False,
       http_only: http_only,

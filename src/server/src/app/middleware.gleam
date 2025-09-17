@@ -1,8 +1,10 @@
 import app/domain/session
+import app/environment
 import app/persist/pool.{type DbPool}
 import app/util/cookie
 import gleam/http.{Get}
 import gleam/http/request
+import gleam/http/response
 import gleam/order
 import gleam/result
 import gleam/time/timestamp
@@ -24,6 +26,9 @@ pub fn default_middleware(
 
   // Rewrite HEAD requests to GET requests and return an empty body.
   use req <- wisp.handle_head(req)
+
+  // Add CORS headers
+  use req <- cors_middleware(req)
 
   handle_request(req)
 }
@@ -84,4 +89,18 @@ fn validate_csrf_and_handle(
     False -> Error(wisp.response(403))
     True -> Ok(handle_request(req))
   }
+}
+
+pub fn cors_middleware(
+  req: wisp.Request,
+  handle_request: fn(wisp.Request) -> wisp.Response,
+) -> wisp.Response {
+  let response = handle_request(req)
+  let client_origin = environment.get_client_origin()
+
+  response
+  |> response.set_header("access-control-allow-origin", client_origin)
+  |> response.set_header("access-control-allow-credentials", "true")
+  |> response.set_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
+  |> response.set_header("access-control-allow-headers", "content-type, x-csrf-token")
 }

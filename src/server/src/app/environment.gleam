@@ -42,6 +42,14 @@ pub fn get_server_port() -> Int {
   get_int_or("SERVER_PORT", 8000)
 }
 
+pub fn get_client_origin() -> String {
+  get_string_or("CLIENT_ORIGIN", "http://localhost:1234")
+}
+
+pub fn get_cookie_domain() -> String {
+  get_string_or("COOKIE_DOMAIN", "localhost")
+}
+
 fn get_string_or(key: String, fallback: String) -> String {
   let key = key |> string.uppercase
   case env.get_string(key) {
