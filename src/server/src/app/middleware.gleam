@@ -101,6 +101,12 @@ pub fn cors_middleware(
   response
   |> response.set_header("access-control-allow-origin", client_origin)
   |> response.set_header("access-control-allow-credentials", "true")
-  |> response.set_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
-  |> response.set_header("access-control-allow-headers", "content-type, x-csrf-token")
+  |> response.set_header(
+    "access-control-allow-methods",
+    "GET, POST, PUT, DELETE, OPTIONS",
+  )
+  |> response.set_header(
+    "access-control-allow-headers",
+    "content-type, x-csrf-token",
+  )
 }

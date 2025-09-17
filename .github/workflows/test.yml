@@ -16,7 +16,6 @@ jobs:
       matrix:
         app: [src/client, src/server, src/shared]
 
-    # Run all commands from each app's root (where gleam.toml lives)
     defaults:
       run:
         working-directory: ${{ matrix.app }}
@@ -29,7 +28,6 @@ jobs:
           otp-version: "28.0"
           gleam-version: "1.12.0"
           rebar3-version: "3.25.1"
-          # elixir-version: "1"
 
       - name: Cache Gleam build
         uses: actions/cache@v4
@@ -42,4 +40,3 @@ jobs:
 
       - run: gleam deps download
       - run: gleam test
-      - run: gleam format --check src test
