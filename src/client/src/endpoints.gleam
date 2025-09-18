@@ -54,6 +54,7 @@ pub fn socket_address() {
 }
 
 // HELPER ------------------------------------------------------------------------
+
 fn to_req(sub_path: String) -> Request(String) {
   let url = get_api_url() <> sub_path
   case url |> request.to() {

@@ -11,8 +11,6 @@ import gleam/bit_array
 import gleam/http.{Get, Options}
 import gleam/http/request
 import gleam/http/response
-import gleam/list
-import gleam/string
 import mist
 import wisp.{type Response}
 import wisp/wisp_mist
@@ -39,13 +37,7 @@ fn handle_request(req: wisp.Request, db: DbPool) -> Response {
 
 fn handle_routes(req: wisp.Request, db: DbPool) -> Response {
   case wisp.path_segments(req) {
-    // Static file serving
-    //   [] -> serve_static_file(req, "index.html")
-    //   ["app.css"] -> serve_static_file(req, "app.css")
-    //   ["app.mjs"] -> serve_static_file(req, "app.mjs")
-    //   ["app.min.css"] -> serve_static_file(req, "app.min.css")
-    //   ["app.min.mjs"] -> serve_static_file(req, "app.min.mjs")
-    [_] -> serve_static_file(req)
+    [] | [_] -> serve_static_file(req)
     ["api", ..sub_paths] -> handle_api_routes(req, db, sub_paths)
     _ -> wisp.not_found()
   }
@@ -100,8 +92,12 @@ fn validate_and_handle_api_requests(
 }
 
 fn serve_static_file(req: wisp.Request) -> Response {
-  // Set the path to the specific file we want to serve
-  wisp.serve_static(req, under: "", from: "priv/static", next: fn() {
+  let req = case req.path {
+    "/" -> request.set_path(req, "/index.html")
+    _ -> req
+  }
+
+  wisp.serve_static(echo req, under: "", from: "priv/static", next: fn() {
     wisp.not_found()
   })
 }
