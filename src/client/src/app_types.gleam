@@ -52,6 +52,8 @@ pub type SocketState {
 
 pub type Msg {
   LoginSuccess(SessionDto)
+  UserOnLogoutClick
+  ApiOnLogoutResponse(Result(Nil, rsvp.Error))
   ShowToast(Toast)
   RemoveToast(Int)
   WsWrapper(WebSocketEvent)

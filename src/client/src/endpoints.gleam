@@ -10,24 +10,19 @@ import util/cookie
 // URLS ------------------------------------------------------------------------
 
 fn get_api_url() -> String {
-  case get_protocol() {
-    "https:" -> "https://localhost:8000/api/"
-    _ -> "http://localhost:8000/api/"
-  }
+  get_origin() <> "/api/"
 }
 
 fn get_socket_url() -> String {
-  case get_protocol() {
-    "https:" -> "wss://" <> get_host() <> "/ws"
-    _ -> "ws://" <> get_host() <> "/ws"
+  case get_origin() {
+    "https://" <> rest -> "wss://" <> rest <> "/ws"
+    "http://" <> rest -> "ws://" <> rest <> "/ws"
+    other -> panic as { "didn't expect origin to be: '" <> other <> "'" }
   }
 }
 
-@external(javascript, "./location_ffi.mjs", "getProtocol")
-fn get_protocol() -> String
-
-@external(javascript, "./location_ffi.mjs", "getHost")
-fn get_host() -> String
+@external(javascript, "./location_ffi.mjs", "getOrigin")
+fn get_origin() -> String
 
 pub fn me() {
   "auth/me" |> to_req
@@ -35,6 +30,10 @@ pub fn me() {
 
 pub fn login() {
   "auth/login" |> to_req
+}
+
+pub fn logout() {
+  "auth/logout" |> to_req
 }
 
 pub fn users() {

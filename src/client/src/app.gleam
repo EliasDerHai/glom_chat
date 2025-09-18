@@ -1,15 +1,17 @@
 import app_types.{
   type LoginState, type Model, type Msg, type NewConversation,
-  type NewConversationMsg, ApiChatMessageResponse, ApiSearchResponse,
-  CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
-  Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
-  ShowToast, UserConversationPartnerSelect, UserModalClose, UserModalOpen,
-  UserOnSendSubmit, UserSearchInputChange, WsWrapper,
+  type NewConversationMsg, ApiChatMessageResponse, ApiOnLogoutResponse,
+  ApiSearchResponse, CheckedAuth, Established, GlobalState, LoggedIn, LoginState,
+  LoginSuccess, Model, NewConversation, NewConversationMsg, Pending, PreLogin,
+  RemoveToast, ShowToast, UserConversationPartnerSelect, UserModalClose,
+  UserModalOpen, UserOnLogoutClick, UserOnSendSubmit, UserSearchInputChange,
+  WsWrapper,
 }
 import endpoints
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/order
@@ -98,6 +100,29 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         // already logged in, ignore duplicate login
         LoggedIn(_) -> noop
       }
+
+    // ### LOGOUT ###
+    UserOnLogoutClick -> {
+      let logout_effect =
+        endpoints.post_request(
+          endpoints.logout(),
+          json.object([]),
+          decode.success(Nil),
+          ApiOnLogoutResponse,
+        )
+      #(model, logout_effect)
+    }
+    ApiOnLogoutResponse(Ok(_)) -> #(
+      Model(PreLogin, model.global_state),
+      effect.none(),
+    )
+    ApiOnLogoutResponse(Error(_)) -> {
+      let toast_effect =
+        effect.from(fn(dispatch) {
+          dispatch(ShowToast(toast.create_error_toast("Failed to logout")))
+        })
+      #(model, toast_effect)
+    }
 
     // ### WEBSOCKET ###
     WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
@@ -349,6 +374,20 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             html.text({ conversation.0 }.username.v),
           ])
         })
+      ]),
+      // Logout Button
+      html.div([class("p-4 border-t border-gray-200")], [
+        html.button(
+          [
+            class(
+              "flex items-center gap-2 text-red-600 hover:bg-red-50 p-2 rounded cursor-pointer w-full",
+            ),
+            event.on_click(UserOnLogoutClick),
+          ],
+          [
+            html.text("Logout"),
+          ],
+        ),
       ]),
     ]),
 
