@@ -6,17 +6,9 @@ on:
       - master
 
 jobs:
-  # Build and deploy /client to GitHub Pages
-  deploy-client:
-    name: Deploy Client to GitHub Pages
+  deploy:
+    name: Deploy 
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,9 +25,10 @@ jobs:
           path: |
             src/shared/build
             src/client/build
-          key: ${{ runner.os }}-gleam-client-${{ hashFiles('src/shared/gleam.toml', 'src/client/gleam.toml', 'src/shared/manifest.toml', 'src/client/manifest.toml') }}
+            src/server/build
+          key: ${{ runner.os }}-gleam-mono-${{ hashFiles('src/shared/gleam.toml', 'src/client/gleam.toml', 'src/server/gleam.toml', 'src/shared/manifest.toml', 'src/client/manifest.toml', 'src/server/manifest.toml') }}
           restore-keys: |
-            ${{ runner.os }}-gleam-client-
+            ${{ runner.os }}-gleam-mono-
 
       # Build shared package first
       - name: Build shared package
@@ -44,35 +37,27 @@ jobs:
           gleam deps download
           gleam build
 
-      # Build client with prod config
-      - name: Build client
+      # Build client and output to server/priv/static
+      - name: Build client for production
         working-directory: src/client
         run: |
           gleam deps download
-          gleam run -m lustre/dev build app --outdir=dist --minify=True
-          cp index.prod.html dist/index.html
+          gleam run -m lustre/dev build app --outdir="../server/priv/static/" --minify=True
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      # Replace index.html with prod version
+      - name: Setup production index.html
+        working-directory: src/server/priv/static
+        run: |
+          cp index.prod.html index.html
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: src/client/dist
+      # Build server
+      - name: Build server
+        working-directory: src/server
+        run: |
+          gleam deps download
+          gleam build
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  # Build and deploy /server to Fly
-  deploy-server:
-    name: Deploy Server to Fly.io
-    runs-on: ubuntu-latest
-    needs: []
-
-    steps:
-      - uses: actions/checkout@v4
-
+      # Deploy to Fly.io
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Deploy to Fly.io
