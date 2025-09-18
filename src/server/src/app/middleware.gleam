@@ -28,7 +28,7 @@ pub fn default_middleware(
   use req <- wisp.handle_head(req)
 
   // Add CORS headers
-  use req <- cors_middleware(req)
+  // TODO: remove ? use req <- cors_middleware(req)
 
   handle_request(req)
 }

@@ -7,17 +7,27 @@ import lustre/effect.{type Effect}
 import rsvp.{type Error}
 import util/cookie
 
-// CONSTS ------------------------------------------------------------------------
+// URLS ------------------------------------------------------------------------
 
-// NOTE:
-// lustre_http cannot handle relative paths like `/api/users` although they would get proxied by lustre dev-tools
-// https://codeberg.org/kero/lustre_http/issues/5#issuecomment-6894908
+fn get_api_url() -> String {
+  case get_protocol() {
+    "https:" -> "https://localhost:8000/api/"
+    _ -> "http://localhost:8000/api/"
+  }
+}
 
-@external(javascript, "./endpoints_ffi.mjs", "getApiUrl")
-fn get_api_url() -> String
+fn get_socket_url() -> String {
+  case get_protocol() {
+    "https:" -> "wss://" <> get_host() <> "/ws"
+    _ -> "ws://" <> get_host() <> "/ws"
+  }
+}
 
-@external(javascript, "./endpoints_ffi.mjs", "getSocketUrl")
-fn get_socket_url() -> String
+@external(javascript, "./location_ffi.mjs", "getProtocol")
+fn get_protocol() -> String
+
+@external(javascript, "./location_ffi.mjs", "getHost")
+fn get_host() -> String
 
 pub fn me() {
   "auth/me" |> to_req
@@ -45,8 +55,11 @@ pub fn socket_address() {
 
 // HELPER ------------------------------------------------------------------------
 fn to_req(sub_path: String) -> Request(String) {
-  let assert Ok(req) = { get_api_url() <> sub_path } |> request.to()
-  req
+  let url = get_api_url() <> sub_path
+  case url |> request.to() {
+    Error(_) -> panic as { "failed building request for url: " <> url }
+    Ok(r) -> r
+  }
 }
 
 /// the default POST
