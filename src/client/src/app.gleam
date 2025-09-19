@@ -10,6 +10,7 @@ import app_types.{
 import endpoints
 import gleam/dict
 import gleam/dynamic/decode
+import gleam/int
 import gleam/io
 import gleam/json
 import gleam/list
@@ -17,6 +18,7 @@ import gleam/option.{None, Some}
 import gleam/order
 import gleam/result
 import gleam/string
+import gleam/time/calendar
 import gleam/time/timestamp
 import lustre
 import lustre/attribute.{class, placeholder}
@@ -373,9 +375,17 @@ fn view_chat(model: LoginState) -> Element(Msg) {
           )
         })
         |> list.map(fn(conversation) {
-          html.div([class("p-4 hover:bg-gray-100 cursor-pointer")], [
-            html.text({ conversation.0 }.username.v),
-          ])
+          html.button(
+            [
+              class("p-4 hover:bg-gray-100 cursor-pointer w-full text-left"),
+              event.on_click(
+                NewConversationMsg(UserConversationPartnerSelect(conversation.0)),
+              ),
+            ],
+            [
+              html.text({ conversation.0 }.username.v),
+            ],
+          )
         })
       ]),
       // Logout Button
@@ -394,15 +404,21 @@ fn view_chat(model: LoginState) -> Element(Msg) {
     html.div([class("w-2/3 flex flex-col")], [
       // Header
       html.header([class("p-4 border-b border-gray-200 bg-white shadow-sm")], [
-        html.h1([class("text-xl font-semibold")], [
-          html.text("Welcome " <> session.username.v <> "!"),
-        ]),
+        html.h1([class("text-xl font-semibold")], case selected_conversation {
+          None -> [
+            html.text("Welcome " <> session.username.v <> "!"),
+          ]
+          Some(shared_user.UserMiniDto(id:, username:)) -> [
+            html.text("Chat with " <> username.v),
+          ]
+        }),
       ]),
 
       // Chat messages area
-      html.main([class("flex-1 p-4 overflow-y-auto")], [
-        html.p([], [html.text("Select a friend to start chatting...")]),
-      ]),
+      html.main(
+        [class("flex-1 p-4 overflow-y-auto")],
+        view_chat_messages(selected_conversation, conversations),
+      ),
 
       // Message input area
       html.footer([class("p-4 bg-white border-t border-gray-200")], [
@@ -436,6 +452,50 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       option.None -> html.div([], [])
     },
   ])
+}
+
+fn view_chat_messages(
+  selected_conversation: option.Option(shared_user.UserMiniDto),
+  conversations: dict.Dict(
+    shared_user.UserMiniDto,
+    List(
+      shared_chat.ChatMessage(
+        shared_user.UserId,
+        shared_chat.ChatMessageDelivery,
+      ),
+    ),
+  ),
+) -> List(Element(Msg)) {
+  case selected_conversation {
+    None -> [
+      html.p([], [html.text("Select a friend to start chatting...")]),
+    ]
+    Some(conversation) -> {
+      case dict.get(conversations, conversation) {
+        Error(_) -> {
+          io.print_error(
+            "couldn't load conversation with" <> conversation.username.v,
+          )
+          [
+            html.p([attribute.class("")], [html.text("Conversation not found")]),
+          ]
+        }
+
+        Ok(messages) -> {
+          case messages {
+            [] -> [
+              html.p([class("text-gray-500 text-center")], [
+                html.text("No messages yet. Start the conversation!"),
+              ]),
+            ]
+            _ ->
+              messages
+              |> list.map(view_chat_message)
+          }
+        }
+      }
+    }
+  }
 }
 
 fn view_new_conversation(state: NewConversation) -> Element(Msg) {
@@ -509,6 +569,42 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
         ),
       ],
     ),
+  ])
+}
+
+fn view_chat_message(message: ClientChatMessage) -> Element(Msg) {
+  let is_draft = message.delivery == shared_chat.Draft
+  let message_class = case is_draft {
+    True -> "bg-yellow-100 border-yellow-200 text-yellow-800"
+    False -> "bg-blue-50 border-blue-200"
+  }
+
+  html.div([class("mb-3 p-3 rounded-lg border " <> message_class)], [
+    html.div([class("flex justify-between items-start mb-1")], [
+      html.span([class("font-medium text-sm")], [
+        html.text(case is_draft {
+          True -> "Draft"
+          False -> "You"
+        }),
+      ]),
+      case message.sent_time {
+        Some(time) -> {
+          let #(_date, time_of_day) =
+            timestamp.to_calendar(time, calendar.utc_offset)
+          let hours =
+            int.to_string(time_of_day.hours) |> string.pad_start(2, "0")
+          let minutes =
+            int.to_string(time_of_day.minutes) |> string.pad_start(2, "0")
+          html.span([class("text-xs text-gray-500")], [
+            html.text(hours <> ":" <> minutes),
+          ])
+        }
+        None -> html.span([], [])
+      },
+    ]),
+    html.p([class("text-sm")], [
+      html.text(string.join(message.text_content, " ")),
+    ]),
   ])
 }
 

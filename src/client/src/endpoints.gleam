@@ -1,7 +1,6 @@
 import gleam/dynamic/decode.{type Decoder}
 import gleam/http
 import gleam/http/request.{type Request}
-import gleam/http/response
 import gleam/json.{type Json}
 import gleam/option
 import gleam/result
