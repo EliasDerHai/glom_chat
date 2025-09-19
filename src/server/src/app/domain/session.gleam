@@ -158,7 +158,7 @@ pub fn login(
     Error(response) -> response
     Ok(#(session, username)) -> {
       wisp.ok()
-      |> glom_cookie.set_cookie_with_domain(
+      |> glom_cookie.set_cookie(
         "session_id",
         session.id
           |> uuid.to_string
@@ -167,7 +167,7 @@ pub fn login(
         day_in_seconds,
         True,
       )
-      |> glom_cookie.set_cookie_with_domain(
+      |> glom_cookie.set_cookie(
         "csrf_token",
         session
           |> csrf_token_builder
@@ -195,8 +195,8 @@ pub fn logout(req: Request, db: DbPool) -> Response {
           let _ = delete_session(db, session_id)
 
           wisp.ok()
-          |> glom_cookie.set_cookie_with_domain("session_id", "", 0, True)
-          |> glom_cookie.set_cookie_with_domain("csrf_token", "", 0, False)
+          |> glom_cookie.set_cookie("session_id", "", 0, True)
+          |> glom_cookie.set_cookie("csrf_token", "", 0, False)
         }
         Error(_) -> wisp.bad_request("session_id is not a uuid")
       }
@@ -295,7 +295,9 @@ pub fn get_session_from_cookie(
   use session <- result.try(
     get_session(db, session_id)
     |> result.map_error(fn(_) {
-      io.println("Failed to get session from database")
+      io.println(
+        "Failed to get session from database " <> uuid.to_string(session_id),
+      )
       wisp.response(401)
     }),
   )

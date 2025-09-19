@@ -87,7 +87,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     // ### AUTH CHECK ###
     CheckedAuth(Ok(session_dto)) -> session_dto |> login
     // no toast bc we do auth-check on-init
-    CheckedAuth(Error(_)) -> noop
+    CheckedAuth(Error(_)) -> #(
+      Model(PreLogin, model.global_state),
+      effect.none(),
+    )
 
     // ### TOASTS ###
     ShowToast(toast_msg) -> toast_state.show_toast(model, toast_msg)
@@ -293,6 +296,7 @@ fn handle_socket_event(
             )
           #(
             Model(LoggedIn(updated_login_state), model.global_state),
+            // TODO: reconnect with delay
             ws.init(endpoints.socket_address(), WsWrapper),
           )
         }

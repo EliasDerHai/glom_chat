@@ -1,4 +1,3 @@
-import app/environment
 import app/util/mist_request
 import gleam/bit_array
 import gleam/crypto
@@ -14,7 +13,7 @@ pub type Cookie {
   Cookie(v: String)
 }
 
-pub fn set_cookie_with_domain(
+pub fn set_cookie(
   response: Response,
   name: String,
   value: String,
@@ -24,11 +23,12 @@ pub fn set_cookie_with_domain(
   let attributes =
     cookie.Attributes(
       max_age: option.Some(max_age),
-      domain: option.Some(environment.get_cookie_domain()),
+      domain: option.None,
       path: option.Some("/"),
+      // still fine on localhost
       secure: True,
       http_only: http_only,
-      same_site: option.Some(cookie.None),
+      same_site: option.Some(cookie.Lax),
     )
 
   response
@@ -48,7 +48,7 @@ fn get_cookie_from_headers(
     headers
     |> list.filter_map(fn(header) {
       case header {
-        #("cookie", value) -> Ok(cookie.parse(value))
+        #("cookie", value) -> cookie.parse(value) |> Ok
         _ -> Error(Nil)
       }
     })

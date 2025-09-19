@@ -97,7 +97,7 @@ fn serve_static_file(req: wisp.Request) -> Response {
     _ -> req
   }
 
-  wisp.serve_static(echo req, under: "", from: "priv/static", next: fn() {
+  wisp.serve_static(req, under: "", from: "priv/static", next: fn() {
     wisp.not_found()
   })
 }

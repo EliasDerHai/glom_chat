@@ -1,10 +1,9 @@
 import app/domain/session
-import app/environment
 import app/persist/pool.{type DbPool}
 import app/util/cookie
 import gleam/http.{Get}
 import gleam/http/request
-import gleam/http/response
+import gleam/io
 import gleam/order
 import gleam/result
 import gleam/time/timestamp
@@ -72,7 +71,7 @@ fn validate_csrf_and_handle(
   use csrf_token_cookie <- result.try(
     cookie.get_cookie_from_wisp_request(req, "csrf_token", wisp.PlainText)
     |> result.map_error(fn(_) {
-      echo "no csrf cookie"
+      io.println("no csrf cookie")
       wisp.response(403)
     }),
   )
@@ -80,33 +79,22 @@ fn validate_csrf_and_handle(
   use csrf_token_header <- result.try(
     request.get_header(req, "x-csrf-token")
     |> result.map_error(fn(_) {
-      echo "no x-csrf header"
+      io.println("no x-csrf header")
       wisp.response(403)
     }),
   )
 
   case csrf_token_cookie.v == csrf_token_header {
-    False -> Error(wisp.response(403))
+    False -> {
+      io.print_error(
+        "csrf token an x-csrf header don't match"
+        <> "\ncookie: "
+        <> csrf_token_cookie.v
+        <> "\nheader: "
+        <> csrf_token_header,
+      )
+      Error(wisp.response(403))
+    }
     True -> Ok(handle_request(req))
   }
-}
-
-pub fn cors_middleware(
-  req: wisp.Request,
-  handle_request: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
-  let response = handle_request(req)
-  let client_origin = environment.get_client_origin()
-
-  response
-  |> response.set_header("access-control-allow-origin", client_origin)
-  |> response.set_header("access-control-allow-credentials", "true")
-  |> response.set_header(
-    "access-control-allow-methods",
-    "GET, POST, PUT, DELETE, OPTIONS",
-  )
-  |> response.set_header(
-    "access-control-allow-headers",
-    "content-type, x-csrf-token",
-  )
 }

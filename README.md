@@ -6,11 +6,9 @@ Learning gleam with a simple toy project ...
 
 | Component | Link |
 | -- | -- |
-| Frontend | [Pages](https://eliasderhai.github.io/glom_chat/) |
-| Backend | [FlyIO](https://glom-chat.fly.dev/) |
+| Frontend  | ~~[Pages](https://eliasderhai.github.io/glom_chat/)~~ -> [FlyIO](https://glom-chat.fly.dev/) |
+| Backend| [FlyIO](https://glom-chat.fly.dev/api) |
 | Database | [Neon](https://neon.com/) |
-
-
 
 ## Getting Started
 

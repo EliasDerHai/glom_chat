@@ -1,5 +1,6 @@
 import gleam/dict
 import gleam/erlang/process
+import gleam/io
 import gleam/otp/actor
 import mist.{type WebsocketConnection}
 import youid/uuid.{type Uuid}
@@ -27,11 +28,11 @@ fn handle_message(
 ) -> actor.Next(State, RegistryMessage) {
   case message {
     Register(user_id, conn) -> {
-      echo { "registered " <> uuid.to_string(user_id) }
+      io.println("registered " <> uuid.to_string(user_id))
       dict.insert(state, user_id, conn)
     }
     Unregister(user_id) -> {
-      echo { "unregistered " <> uuid.to_string(user_id) }
+      io.println("unregistered " <> uuid.to_string(user_id))
       dict.delete(state, user_id)
     }
   }
