@@ -188,20 +188,30 @@ pub fn login(
 pub fn logout(req: Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, Post)
 
-  case wisp.get_cookie(req, "session_id", wisp.Signed) {
-    Ok(session_id_str) ->
-      case uuid.from_string(session_id_str) {
-        Ok(session_id) -> {
-          let _ = delete_session(db, session_id)
+  {
+    use session_id <- result.try(
+      wisp.get_cookie(req, "session_id", wisp.Signed)
+      |> result.map_error(fn(_) {
+        wisp.bad_request("no cookie with name 'session_id'")
+      }),
+    )
 
-          wisp.ok()
-          |> glom_cookie.set_cookie("session_id", "", 0, True)
-          |> glom_cookie.set_cookie("csrf_token", "", 0, False)
-        }
-        Error(_) -> wisp.bad_request("session_id is not a uuid")
-      }
-    Error(_) -> wisp.bad_request("no cookie with name 'session_id'")
+    use session_id <- result.try(
+      uuid.from_string(session_id)
+      |> result.map_error(fn(_) { wisp.bad_request("session_id is not valid") }),
+    )
+
+    use _ <- result.try(
+      delete_session(db, session_id)
+      |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    )
+
+    wisp.ok()
+    |> glom_cookie.set_cookie("session_id", "", 0, True)
+    |> glom_cookie.set_cookie("csrf_token", "", 0, False)
+    |> Ok
   }
+  |> result.unwrap_both
 }
 
 fn verify_user_credentials_and_create_session(

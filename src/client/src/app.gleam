@@ -107,19 +107,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     // ### LOGOUT ###
     UserOnLogoutClick -> {
       let logout_effect =
-        endpoints.post_request(
+        endpoints.post_request_ignore_response_body(
           endpoints.logout(),
-          json.object([]),
-          decode.success(Nil),
+          json.null(),
           ApiOnLogoutResponse,
         )
       #(model, logout_effect)
     }
-    ApiOnLogoutResponse(Ok(_)) -> #(
-      Model(PreLogin, model.global_state),
-      effect.none(),
-    )
-    ApiOnLogoutResponse(Error(_)) -> {
+    ApiOnLogoutResponse(Ok(_)) -> {
+      // TODO: disconnect socket
+      #(Model(PreLogin, model.global_state), effect.none())
+    }
+    ApiOnLogoutResponse(Error(e)) -> {
       let toast_effect =
         effect.from(fn(dispatch) {
           dispatch(ShowToast(toast.create_error_toast("Failed to logout")))
