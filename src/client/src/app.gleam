@@ -379,17 +379,13 @@ fn view_chat(model: LoginState) -> Element(Msg) {
         })
       ]),
       // Logout Button
-      html.div([class("p-4 border-t border-gray-200")], [
-        html.button(
-          [
-            class(
-              "flex items-center gap-2 text-red-600 hover:bg-red-50 p-2 rounded cursor-pointer w-full",
-            ),
-            event.on_click(UserOnLogoutClick),
-          ],
-          [
-            html.text("Logout"),
-          ],
+      html.div([class("p-4")], [
+        button.view_default_icon_button(
+          text: "Logout",
+          disabled: False,
+          msg: UserOnLogoutClick,
+          additional_class: "",
+          icon: icons.log_out([class("size-6")]),
         ),
       ]),
     ]),
