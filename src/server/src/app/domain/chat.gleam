@@ -3,6 +3,7 @@ import app/persist/pool.{type DbPool}
 import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
+import app/util/query_result
 import gleam/http
 import gleam/json
 import gleam/list
@@ -87,7 +88,7 @@ pub fn chats(req: Request, db: DbPool, user_id: String) -> Response {
 
     use chat_messages: List(ChatMessage(UserId, ChatMessageDelivery)) <- result.try(
       get_chat_messages_for_user(db, user_id)
-      |> result.map_error(fn(_) { wisp.internal_server_error() }),
+      |> query_result.map_query_result(),
     )
 
     let jsons =

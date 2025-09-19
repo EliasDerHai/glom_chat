@@ -1,5 +1,6 @@
 import app/persist/pool.{type DbPool}
 import app/persist/sql
+import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get}
 import gleam/json
@@ -74,25 +75,25 @@ pub fn list_users(req: Request, db: DbPool) -> Response {
     |> result.map_error(fn(_) { "" |> Username })
     |> result.unwrap_both()
 
-  case
-    db
-    |> pool.conn()
-    |> sql.select_users_by_username(search_username.v, 50)
-  {
-    Error(_) -> wisp.internal_server_error()
-    Ok(r) -> {
-      list.map(r.rows, from_select_users_row)
-      |> json.array(fn(el) {
-        let #(user_id, username) = el
+  let map_rows = fn(r: pog.Returned(sql.SelectUsersByUsernameRow)) {
+    list.map(r.rows, from_select_users_row)
+    |> json.array(fn(el) {
+      let #(user_id, username) = el
 
-        #(user_id.v |> uuid.to_string |> shared_user.UserId, username)
-        |> shared_user.to_id_username_dto()
-        |> shared_user.user_mini_dto_to_json
-      })
-      |> json.to_string
-      |> wisp.json_response(200)
-    }
+      #(user_id.v |> uuid.to_string |> shared_user.UserId, username)
+      |> shared_user.to_id_username_dto()
+      |> shared_user.user_mini_dto_to_json
+    })
+    |> json.to_string
+    |> wisp.json_response(200)
   }
+
+  db
+  |> pool.conn()
+  |> sql.select_users_by_username(search_username.v, 50)
+  |> query_result.map_query_result
+  |> result.map(map_rows)
+  |> result.unwrap_both
 }
 
 type CreateUserErrorReason {
@@ -181,7 +182,7 @@ pub fn select_user(db: DbPool, id: Uuid) -> Result(UserEntity, Response) {
     db
     |> pool.conn()
     |> sql.select_user(id)
-    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    |> query_result.map_query_result,
   )
 
   use row <- result.try(
@@ -208,7 +209,7 @@ fn delete_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
     db
     |> pool.conn()
     |> sql.delete_user(id)
-    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    |> query_result.map_query_result(),
   )
 
   case query_result.count {

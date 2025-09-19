@@ -2,6 +2,7 @@ import app/domain/user
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import app/util/cookie as glom_cookie
+import app/util/query_result
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic
@@ -69,7 +70,10 @@ pub fn from_get_session_by_user_id_row(
 
 const day_in_seconds = 86_400
 
-fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
+fn create_session(
+  db: DbPool,
+  user_id: Uuid,
+) -> Result(SessionEntity, pog.QueryError) {
   let session_id = uuid.v7()
   let expires_at =
     timestamp.system_time()
@@ -82,8 +86,7 @@ fn create_session(db: DbPool, user_id: Uuid) -> Result(SessionEntity, Nil) {
 
   use _ <- result.try(
     conn
-    |> sql.create_session(session_id, user_id, expires_at, csrf_secret)
-    |> result.map_error(fn(_) { Nil }),
+    |> sql.create_session(session_id, user_id, expires_at, csrf_secret),
   )
 
   Ok(SessionEntity(session_id, user_id, expires_at, csrf_secret))
@@ -109,7 +112,7 @@ pub fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
 fn get_session_by_user_id(
   db: DbPool,
   user_id: Uuid,
-) -> Result(Option(SessionEntity), Nil) {
+) -> Result(Option(SessionEntity), pog.QueryError) {
   db
   |> pool.conn()
   |> sql.select_session_by_user_id(user_id)
@@ -118,23 +121,23 @@ fn get_session_by_user_id(
     |> option.from_result
     |> option.map(from_get_session_by_user_id_row)
   })
-  |> result.map_error(fn(_) { Nil })
 }
 
-fn delete_session(db: DbPool, session_id: Uuid) -> Result(Nil, Nil) {
+fn delete_session(
+  db: DbPool,
+  session_id: Uuid,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
   db
   |> pool.conn()
   |> sql.delete_session(session_id)
-  |> result.map(fn(_) { Nil })
-  |> result.map_error(fn(_) { Nil })
 }
 
-fn cleanup_expired_sessions(db: DbPool) -> Result(Nil, Nil) {
+fn cleanup_expired_sessions(
+  db: DbPool,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
   db
   |> pool.conn()
   |> sql.delete_expired_sessions()
-  |> result.map(fn(_) { Nil })
-  |> result.map_error(fn(_) { Nil })
 }
 
 // ################################################################################
@@ -203,7 +206,7 @@ pub fn logout(req: Request, db: DbPool) -> Response {
 
     use _ <- result.try(
       delete_session(db, session_id)
-      |> result.map_error(fn(_) { wisp.internal_server_error() }),
+      |> query_result.map_query_result(),
     )
 
     wisp.ok()
@@ -231,7 +234,7 @@ fn verify_user_credentials_and_create_session(
     db
     |> pool.conn()
     |> sql.select_user_by_credentials(dto.username, dto.password)
-    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    |> query_result.map_query_result(),
   )
 
   use sql.SelectUserByCredentialsRow(user_id) <- result.try(
@@ -242,7 +245,7 @@ fn verify_user_credentials_and_create_session(
 
   use old_session <- result.try(
     get_session_by_user_id(db, user_id)
-    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    |> query_result.map_query_result(),
   )
 
   case old_session {
@@ -253,13 +256,14 @@ fn verify_user_credentials_and_create_session(
         <> uuid.to_string(old_session.id)
         <> " - deleting...",
       )
-      delete_session(db, old_session.id) |> result.unwrap_both
+      let _ = delete_session(db, old_session.id)
+      Nil
     }
   }
 
   use session <- result.try(
     create_session(db, user_id)
-    |> result.map_error(fn(_) { wisp.internal_server_error() }),
+    |> query_result.map_query_result(),
   )
 
   Ok(#(session, dto.username |> shared_user.Username))

@@ -120,7 +120,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       // TODO: disconnect socket
       #(Model(PreLogin, model.global_state), effect.none())
     }
-    ApiOnLogoutResponse(Error(e)) -> {
+    ApiOnLogoutResponse(Error(_)) -> {
       let toast_effect =
         effect.from(fn(dispatch) {
           dispatch(ShowToast(toast.create_error_toast("Failed to logout")))
@@ -408,8 +408,8 @@ fn view_chat(model: LoginState) -> Element(Msg) {
           None -> [
             html.text("Welcome " <> session.username.v <> "!"),
           ]
-          Some(shared_user.UserMiniDto(id:, username:)) -> [
-            html.text("Chat with " <> username.v),
+          Some(dto) -> [
+            html.text("Chat with " <> dto.username.v),
           ]
         }),
       ]),
