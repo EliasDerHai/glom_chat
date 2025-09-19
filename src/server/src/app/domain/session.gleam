@@ -11,7 +11,7 @@ import gleam/http.{Post}
 import gleam/io
 import gleam/json
 import gleam/list
-import gleam/option.{type Option}
+import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
@@ -164,11 +164,10 @@ pub fn login(
       |> glom_cookie.set_cookie(
         "session_id",
         session.id
-          |> uuid.to_string
-          |> bit_array.from_string
-          |> crypto.sign_message(secret, crypto.Sha256),
+          |> uuid.to_string,
         day_in_seconds,
         True,
+        option.Some(#(crypto.Sha256, secret)),
       )
       |> glom_cookie.set_cookie(
         "csrf_token",
@@ -177,6 +176,7 @@ pub fn login(
           |> bit_array.base64_url_encode(False),
         day_in_seconds,
         False,
+        None,
       )
       |> wisp.json_body(
         session
@@ -210,8 +210,8 @@ pub fn logout(req: Request, db: DbPool) -> Response {
     )
 
     wisp.ok()
-    |> glom_cookie.set_cookie("session_id", "", 0, True)
-    |> glom_cookie.set_cookie("csrf_token", "", 0, False)
+    |> glom_cookie.set_cookie("session_id", "", 0, True, None)
+    |> glom_cookie.set_cookie("csrf_token", "", 0, False, None)
     |> Ok
   }
   |> result.unwrap_both
@@ -249,7 +249,7 @@ fn verify_user_credentials_and_create_session(
   )
 
   case old_session {
-    option.None -> Nil
+    None -> Nil
     option.Some(old_session) -> {
       io.println(
         "found old session for user "

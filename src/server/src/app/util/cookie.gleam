@@ -1,13 +1,13 @@
 import app/util/mist_request
 import gleam/bit_array
 import gleam/crypto
-import gleam/http
+import gleam/http.{type Header}
 import gleam/http/cookie
 import gleam/http/response
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/result
-import wisp.{type Response}
+import wisp.{type Request, type Response, type Security}
 
 pub type Cookie {
   Cookie(v: String)
@@ -19,6 +19,7 @@ pub fn set_cookie(
   value: String,
   max_age: Int,
   http_only: Bool,
+  hasher: Option(#(crypto.HashAlgorithm, BitArray)),
 ) -> Response {
   let attributes =
     cookie.Attributes(
@@ -31,6 +32,14 @@ pub fn set_cookie(
       same_site: option.Some(cookie.Lax),
     )
 
+  let value = case hasher {
+    option.None -> value
+    option.Some(#(algorithm, secret)) ->
+      value
+      |> bit_array.from_string
+      |> crypto.sign_message(secret, algorithm)
+  }
+
   response
   |> response.prepend_header(
     "set-cookie",
@@ -39,9 +48,9 @@ pub fn set_cookie(
 }
 
 fn get_cookie_from_headers(
-  headers: List(http.Header),
+  headers: List(Header),
   cookie_name: String,
-  security: wisp.Security,
+  security: Security,
   secret: BitArray,
 ) -> Result(Cookie, Nil) {
   use value <- result.try(
@@ -72,9 +81,9 @@ fn get_cookie_from_headers(
 
 // For wisp requests (HTTP)
 pub fn get_cookie_from_wisp_request(
-  request: wisp.Request,
+  request: Request,
   cookie_name: String,
-  security: wisp.Security,
+  security: Security,
 ) -> Result(Cookie, Nil) {
   let secret = <<wisp.get_secret_key_base(request):utf8>>
   get_cookie_from_headers(request.headers, cookie_name, security, secret)
@@ -84,7 +93,7 @@ pub fn get_cookie_from_wisp_request(
 pub fn get_cookie_from_mist_request(
   request: mist_request.MistRequest,
   cookie_name: String,
-  security: wisp.Security,
+  security: Security,
   secret: BitArray,
 ) -> Result(Cookie, Nil) {
   get_cookie_from_headers(request.headers, cookie_name, security, secret)

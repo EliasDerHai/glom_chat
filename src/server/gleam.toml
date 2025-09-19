@@ -27,6 +27,7 @@ gleam_time = ">= 1.4.0 and < 2.0.0"
 gleam_crypto = ">= 1.5.1 and < 2.0.0"
 dot_env = ">= 1.2.0 and < 2.0.0"
 shared = { path = "../shared" }
+glisten = ">= 8.0.1 and < 9.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
