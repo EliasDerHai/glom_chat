@@ -34,7 +34,7 @@ pub fn remove_toast(model: Model, toast_id: Int) -> #(Model, Effect(Msg)) {
 
 /// deriving socket-conn-lost info directly from model
 /// error toast shows after 5 sec without socket conn
-pub fn toast_incl_socket_disconnet(model: Model) {
+pub fn toast_incl_socket_disconnet(model: Model) -> List(Toast) {
   let toasts_without_socket_error =
     list.filter(model.global_state.toasts, fn(toast_msg) {
       !string.starts_with(toast_msg.content, "Socket connection lost")

@@ -28,6 +28,7 @@ import lustre/element/html
 import lustre/event
 import lustre_websocket as ws
 import pre_login
+import rsvp
 import shared_chat.{type ClientChatMessage}
 import shared_session
 import shared_user.{Username, UsersByUsernameDto}
@@ -116,17 +117,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         )
       #(model, logout_effect)
     }
-    ApiOnLogoutResponse(Ok(_)) -> {
-      // TODO: disconnect socket
-      #(Model(PreLogin, model.global_state), effect.none())
-    }
-    ApiOnLogoutResponse(Error(_)) -> {
-      let toast_effect =
-        effect.from(fn(dispatch) {
-          dispatch(ShowToast(toast.create_error_toast("Failed to logout")))
-        })
-      #(model, toast_effect)
-    }
+    ApiOnLogoutResponse(r) -> logout(r, model, noop)
 
     // ### WEBSOCKET ###
     WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
@@ -136,6 +127,32 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     UserOnSendSubmit -> #(model, send_message(model))
     // TODO: 
     ApiChatMessageResponse(_) -> todo
+  }
+}
+
+fn logout(
+  request_result: Result(Nil, rsvp.Error),
+  model: app_types.Model,
+  noop: #(Model, Effect(Msg)),
+) -> #(Model, Effect(Msg)) {
+  let login_model = Model(PreLogin, model.global_state)
+
+  case request_result {
+    Ok(_) ->
+      case model.app_state {
+        LoggedIn(LoginState(_, Established(sock), ..)) -> #(
+          login_model,
+          ws.close(sock),
+        )
+        LoggedIn(_) -> #(login_model, effect.none())
+        PreLogin -> noop
+      }
+
+    Error(_) ->
+      toast_state.show_toast(
+        model,
+        toast.create_error_toast("Failed to logout"),
+      )
   }
 }
 
