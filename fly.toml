@@ -25,7 +25,7 @@ processes = ['app']
 [[http_service.checks]]
 interval = '15s'
 timeout = '2s'
-grace_period = '1s'
+grace_period = '10s'
 method = 'get'
 path = '/api/ping'
 protocol = 'http'
