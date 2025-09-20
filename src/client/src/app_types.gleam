@@ -5,7 +5,7 @@ import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp
 import shared_chat.{type ClientChatMessage}
 import shared_session.{type SessionDto}
-import shared_user.{type UserMiniDto}
+import shared_user.{type UserId, type UserMiniDto}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -34,13 +34,13 @@ pub type LoginState {
     session: SessionDto,
     web_socket: SocketState,
     new_conversation: Option(NewConversation),
-    selected_conversation: Option(UserMiniDto),
-    conversations: Dict(UserMiniDto, List(ClientChatMessage)),
+    selected_conversation: Option(UserMiniDto(UserId)),
+    conversations: Dict(UserMiniDto(UserId), List(ClientChatMessage)),
   )
 }
 
 pub type NewConversation {
-  NewConversation(suggestions: List(UserMiniDto))
+  NewConversation(suggestions: List(UserMiniDto(UserId)))
 }
 
 pub type SocketState {
@@ -60,13 +60,14 @@ pub type Msg {
   CheckedAuth(Result(SessionDto, rsvp.Error))
   NewConversationMsg(NewConversationMsg)
   UserOnSendSubmit
-  ApiChatMessageResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
+  ApiChatMessageFetchResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
+  ApiChatMessageSendResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
 }
 
 pub type NewConversationMsg {
   UserModalOpen
   UserModalClose
   UserSearchInputChange(String)
-  ApiSearchResponse(Result(List(UserMiniDto), rsvp.Error))
-  UserConversationPartnerSelect(UserMiniDto)
+  ApiSearchResponse(Result(List(UserMiniDto(UserId)), rsvp.Error))
+  UserConversationPartnerSelect(UserMiniDto(UserId))
 }

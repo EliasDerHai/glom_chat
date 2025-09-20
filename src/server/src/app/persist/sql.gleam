@@ -438,6 +438,42 @@ pub fn select_user_by_username(
   |> pog.execute(db)
 }
 
+/// A row you get from running the `select_users_by_ids` query
+/// defined in `./src/app/persist/sql/select_users_by_ids.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.4.1 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectUsersByIdsRow {
+  SelectUsersByIdsRow(id: Uuid, username: String)
+}
+
+/// Runs the `select_users_by_ids` query
+/// defined in `./src/app/persist/sql/select_users_by_ids.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_users_by_ids(
+  db: pog.Connection,
+  arg_1: List(Uuid),
+) -> Result(pog.Returned(SelectUsersByIdsRow), pog.QueryError) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    use username <- decode.field(1, decode.string)
+    decode.success(SelectUsersByIdsRow(id:, username:))
+  }
+
+  "SELECT id, username FROM users WHERE id = ANY($1);
+"
+  |> pog.query
+  |> pog.parameter(
+    pog.array(fn(value) { pog.text(uuid.to_string(value)) }, arg_1),
+  )
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_users_by_username` query
 /// defined in `./src/app/persist/sql/select_users_by_username.sql`.
 ///

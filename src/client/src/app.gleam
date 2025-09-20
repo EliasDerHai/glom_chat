@@ -1,11 +1,12 @@
 import app_types.{
   type LoginState, type Model, type Msg, type NewConversation,
-  type NewConversationMsg, ApiChatMessageResponse, ApiOnLogoutResponse,
-  ApiSearchResponse, CheckedAuth, Established, GlobalState, LoggedIn, LoginState,
-  LoginSuccess, Model, NewConversation, NewConversationMsg, Pending, PreLogin,
-  RemoveToast, ShowToast, UserConversationPartnerSelect, UserModalClose,
-  UserModalOpen, UserOnLogoutClick, UserOnSendSubmit, UserSearchInputChange,
-  WsWrapper,
+  type NewConversationMsg,
+  ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
+  ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
+  CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
+  Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
+  ShowToast, UserConversationPartnerSelect, UserModalClose, UserModalOpen,
+  UserOnLogoutClick, UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
 import endpoints
 import gleam/dict
@@ -31,7 +32,7 @@ import pre_login
 import rsvp
 import shared_chat.{type ClientChatMessage}
 import shared_session
-import shared_user.{Username, UsersByUsernameDto}
+import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import util/button
 import util/icons
 import util/toast
@@ -81,9 +82,35 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       ),
       effect.batch([
         ws.init(endpoints.socket_address(), WsWrapper),
-        // TODO: load conversations
+        endpoints.get_request(
+          endpoints.chats(),
+          shared_chat.chat_message_decoder(),
+          todo,
+        ),
       ]),
     )
+  }
+
+  let logout = fn(result: Result(Nil, rsvp.Error)) -> #(Model, Effect(Msg)) {
+    let login_model = Model(PreLogin, model.global_state)
+
+    case result {
+      Ok(_) ->
+        case model.app_state {
+          LoggedIn(LoginState(_, Established(sock), ..)) -> #(
+            login_model,
+            ws.close(sock),
+          )
+          LoggedIn(_) -> #(login_model, effect.none())
+          PreLogin -> noop
+        }
+
+      Error(_) ->
+        toast_state.show_toast(
+          model,
+          toast.create_error_toast("Failed to logout"),
+        )
+    }
   }
 
   case msg {
@@ -117,7 +144,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         )
       #(model, logout_effect)
     }
-    ApiOnLogoutResponse(r) -> logout(r, model, noop)
+    ApiOnLogoutResponse(r) -> logout(r)
 
     // ### WEBSOCKET ###
     WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
@@ -126,33 +153,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
     UserOnSendSubmit -> #(model, send_message(model))
     // TODO: 
-    ApiChatMessageResponse(_) -> todo
-  }
-}
-
-fn logout(
-  request_result: Result(Nil, rsvp.Error),
-  model: app_types.Model,
-  noop: #(Model, Effect(Msg)),
-) -> #(Model, Effect(Msg)) {
-  let login_model = Model(PreLogin, model.global_state)
-
-  case request_result {
-    Ok(_) ->
-      case model.app_state {
-        LoggedIn(LoginState(_, Established(sock), ..)) -> #(
-          login_model,
-          ws.close(sock),
-        )
-        LoggedIn(_) -> #(login_model, effect.none())
-        PreLogin -> noop
-      }
-
-    Error(_) ->
-      toast_state.show_toast(
-        model,
-        toast.create_error_toast("Failed to logout"),
-      )
+    ApiChatMessageSendResponse(_) -> todo
+    ApiChatConversationsFetchResponse(_) -> todo
   }
 }
 
@@ -258,7 +260,7 @@ fn send_message(model: Model) -> Effect(Msg) {
     endpoints.chats(),
     draft |> shared_chat.chat_message_to_json,
     shared_chat.chat_message_decoder(),
-    ApiChatMessageResponse,
+    ApiChatMessageSendResponse,
   )
 }
 
@@ -472,15 +474,10 @@ fn view_chat(model: LoginState) -> Element(Msg) {
 }
 
 fn view_chat_messages(
-  selected_conversation: option.Option(shared_user.UserMiniDto),
+  selected_conversation: option.Option(UserMiniDto(UserId)),
   conversations: dict.Dict(
-    shared_user.UserMiniDto,
-    List(
-      shared_chat.ChatMessage(
-        shared_user.UserId,
-        shared_chat.ChatMessageDelivery,
-      ),
-    ),
+    UserMiniDto(UserId),
+    List(shared_chat.ChatMessage(UserId, shared_chat.ChatMessageDelivery)),
   ),
 ) -> List(Element(Msg)) {
   case selected_conversation {
@@ -562,7 +559,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
                 dtos ->
                   html.div(
                     [],
-                    list.map(dtos, fn(dto: shared_user.UserMiniDto) {
+                    list.map(dtos, fn(dto: UserMiniDto(UserId)) {
                       html.button(
                         [
                           class(

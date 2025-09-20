@@ -1,4 +1,5 @@
 import app/domain/session
+import app/domain/user.{type UserId}
 import app/persist/pool.{type DbPool}
 import app/registry.{type RegistryMessage, Register, Unregister}
 import app/util/cookie
@@ -11,10 +12,9 @@ import gleam/otp/actor
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
 import wisp
-import youid/uuid.{type Uuid}
 
 pub type WsState {
-  WsState(user_id: Uuid)
+  WsState(user_id: UserId)
 }
 
 pub fn handle_ws_request(

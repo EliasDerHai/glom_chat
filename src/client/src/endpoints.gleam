@@ -49,6 +49,10 @@ pub fn chats() {
   "chats" |> to_req
 }
 
+pub fn conversations() {
+  "chats/conversations" |> to_req
+}
+
 pub fn socket_address() {
   get_socket_url()
 }

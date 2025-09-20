@@ -1,18 +1,22 @@
+import app/domain/session
 import app/domain/user.{type UserId, UserId}
 import app/persist/pool.{type DbPool}
 import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
 import app/util/query_result
+import gleam/dict
 import gleam/http
 import gleam/json
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/set
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
+import util/dict_extension
 import wisp.{type Request, type Response}
-import youid/uuid.{type Uuid}
+import youid/uuid
 
 // ################################################################################
 // Types
@@ -63,11 +67,11 @@ fn to_shared_chat_message_delivery(
 
 pub fn get_chat_messages_for_user(
   db: DbPool,
-  user_id: Uuid,
+  user_id: UserId,
 ) -> Result(List(ChatMessage(UserId, ChatMessageDelivery)), pog.QueryError) {
   db
   |> pool.conn()
-  |> sql.select_chat_messages_by_sender_id_or_receiver_id(user_id)
+  |> sql.select_chat_messages_by_sender_id_or_receiver_id(user_id.v)
   |> result.map(fn(query_result) {
     list.map(query_result.rows, message_from_rows)
   })
@@ -77,23 +81,56 @@ pub fn get_chat_messages_for_user(
 // Endpoints
 // ################################################################################
 
-/// GET `/chats/:id` endpoint
-pub fn chats(req: Request, db: DbPool, user_id: String) -> Response {
+/// GET `/chats/conversations` endpoint
+pub fn chat_conversations(
+  req: Request,
+  db: DbPool,
+  session: session.SessionEntity,
+) -> Response {
   use <- wisp.require_method(req, http.Get)
 
   {
-    use user_id <- result.try(
-      uuid.from_string(user_id) |> result.map_error(fn(_) { wisp.not_found() }),
-    )
-
     use chat_messages: List(ChatMessage(UserId, ChatMessageDelivery)) <- result.try(
-      get_chat_messages_for_user(db, user_id)
+      get_chat_messages_for_user(db, session.user_id)
       |> query_result.map_query_result(),
     )
+
+    let conversation_partners =
+      chat_messages
+      |> list.flat_map(fn(item) { [item.receiver, item.sender] })
+      |> set.from_list()
+      |> set.filter(fn(item) { item != session.user_id })
+
+    use conversation_partners <- result.try(
+      db |> user.select_users_by_ids(conversation_partners),
+    )
+
+    let conversations =
+      chat_messages
+      |> list.group(fn(item) {
+        case item.sender == session.user_id {
+          False -> item.sender
+          True -> item.receiver
+        }
+      })
+      |> dict_extension.map_keys(fn(key) {
+        case
+          conversation_partners
+          |> list.find(fn(item) { item.id == key })
+        {
+          Ok(conversation_partner) -> conversation_partner
+          Error(_) ->
+            panic as {
+                "couldn't find conversation partner " <> key.v |> uuid.to_string
+              }
+        }
+      })
 
     let jsons =
       json.array(chat_messages, fn(msg) {
         msg |> to_shared_message |> shared_chat.chat_message_to_json
+        // TODO: actual mapping of dict
+        todo
       })
 
     wisp.json_response(jsons |> json.to_string, 200) |> Ok

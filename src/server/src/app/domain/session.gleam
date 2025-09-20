@@ -1,4 +1,4 @@
-import app/domain/user
+import app/domain/user.{type UserId, UserId}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
 import app/util/cookie as glom_cookie
@@ -29,7 +29,7 @@ import youid/uuid.{type Uuid}
 pub type SessionEntity {
   SessionEntity(
     id: Uuid,
-    user_id: Uuid,
+    user_id: UserId,
     expires_at: timestamp.Timestamp,
     csrf_secret: String,
   )
@@ -38,7 +38,7 @@ pub type SessionEntity {
 pub fn to_session_dto(entity: SessionEntity, username: Username) -> SessionDto {
   SessionDto(
     entity.id |> uuid.to_string |> shared_session.SessionId,
-    entity.user_id |> uuid.to_string |> shared_user.UserId,
+    entity.user_id.v |> uuid.to_string |> shared_user.UserId,
     username,
     entity.expires_at,
   )
@@ -47,7 +47,7 @@ pub fn to_session_dto(entity: SessionEntity, username: Username) -> SessionDto {
 pub fn from_get_session_row(row: sql.SelectSessionByIdRow) -> SessionEntity {
   SessionEntity(
     id: row.id,
-    user_id: row.user_id,
+    user_id: row.user_id |> UserId,
     expires_at: row.expires_at,
     csrf_secret: row.csrf_secret,
   )
@@ -58,7 +58,7 @@ pub fn from_get_session_by_user_id_row(
 ) -> SessionEntity {
   SessionEntity(
     id: row.id,
-    user_id: row.user_id,
+    user_id: row.user_id |> UserId,
     expires_at: row.expires_at,
     csrf_secret: row.csrf_secret,
   )
@@ -72,7 +72,7 @@ const day_in_seconds = 86_400
 
 fn create_session(
   db: DbPool,
-  user_id: Uuid,
+  user_id: UserId,
 ) -> Result(SessionEntity, pog.QueryError) {
   let session_id = uuid.v7()
   let expires_at =
@@ -86,7 +86,7 @@ fn create_session(
 
   use _ <- result.try(
     conn
-    |> sql.create_session(session_id, user_id, expires_at, csrf_secret),
+    |> sql.create_session(session_id, user_id.v, expires_at, csrf_secret),
   )
 
   Ok(SessionEntity(session_id, user_id, expires_at, csrf_secret))
@@ -111,11 +111,11 @@ pub fn get_session(db: DbPool, session_id: Uuid) -> Result(SessionEntity, Nil) {
 
 fn get_session_by_user_id(
   db: DbPool,
-  user_id: Uuid,
+  user_id: UserId,
 ) -> Result(Option(SessionEntity), pog.QueryError) {
   db
   |> pool.conn()
-  |> sql.select_session_by_user_id(user_id)
+  |> sql.select_session_by_user_id(user_id.v)
   |> result.map(fn(r) {
     list.first(r.rows)
     |> option.from_result
@@ -242,6 +242,8 @@ fn verify_user_credentials_and_create_session(
     |> list.first
     |> result.map_error(fn(_) { wisp.response(401) }),
   )
+
+  let user_id = user_id |> UserId
 
   use old_session <- result.try(
     get_session_by_user_id(db, user_id)

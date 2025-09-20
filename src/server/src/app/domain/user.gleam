@@ -6,8 +6,9 @@ import gleam/http.{Delete, Get}
 import gleam/json
 import gleam/list
 import gleam/result
+import gleam/set.{type Set}
 import pog
-import shared_user.{type Username, Username}
+import shared_user.{type UserMiniDto, type Username, Username}
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -17,6 +18,10 @@ import youid/uuid.{type Uuid}
 
 pub type UserId {
   UserId(v: Uuid)
+}
+
+pub fn unpack(user_id: UserId) {
+  user_id.v
 }
 
 pub fn to_shared_user_id(id: UserId) -> shared_user.UserId {
@@ -159,16 +164,18 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 }
 
 /// `/users/:id` endpoint
-pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
+pub fn user(req: Request, db: DbPool, user_id: String) -> Response {
   {
-    use id <- result.try(
-      uuid.from_string(id_str)
-      |> result.map_error(fn(_) { wisp.bad_request("not a uuid") }),
+    use user_id <- result.try(
+      user_id
+      |> uuid.from_string
+      |> result.map_error(fn(_) { wisp.bad_request("not a uuid") })
+      |> result.map(fn(v) { v |> UserId }),
     )
 
     case req.method {
-      Get -> fetch_user(db, id)
-      Delete -> delete_user(db, id)
+      Get -> fetch_user(db, user_id)
+      Delete -> delete_user(db, user_id)
       _ ->
         wisp.method_not_allowed([Get, Delete])
         |> Error
@@ -177,11 +184,11 @@ pub fn user(req: Request, db: DbPool, id_str: String) -> Response {
   |> result.unwrap_both
 }
 
-pub fn select_user(db: DbPool, id: Uuid) -> Result(UserEntity, Response) {
+pub fn select_user(db: DbPool, id: UserId) -> Result(UserEntity, Response) {
   use query_result <- result.try(
     db
     |> pool.conn()
-    |> sql.select_user(id)
+    |> sql.select_user(id.v)
     |> query_result.map_query_result,
   )
 
@@ -194,7 +201,7 @@ pub fn select_user(db: DbPool, id: Uuid) -> Result(UserEntity, Response) {
   row |> from_select_user_row |> Ok
 }
 
-fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+fn fetch_user(db: DbPool, id: UserId) -> Result(Response, Response) {
   use user <- result.try(select_user(db, id))
   user
   |> to_dto
@@ -204,11 +211,11 @@ fn fetch_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
   |> Ok
 }
 
-fn delete_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
+fn delete_user(db: DbPool, id: UserId) -> Result(Response, Response) {
   use query_result <- result.try(
     db
     |> pool.conn()
-    |> sql.delete_user(id)
+    |> sql.delete_user(id.v)
     |> query_result.map_query_result(),
   )
 
@@ -216,4 +223,19 @@ fn delete_user(db: DbPool, id: Uuid) -> Result(Response, Response) {
     1 -> Ok(wisp.ok())
     _ -> Error(wisp.not_found())
   }
+}
+
+pub fn select_users_by_ids(
+  db: DbPool,
+  ids: Set(UserId),
+) -> Result(List(UserMiniDto(UserId)), Response) {
+  db
+  |> pool.conn()
+  |> sql.select_users_by_ids(ids |> set.map(unpack) |> set.to_list)
+  |> result.map(fn(r) {
+    list.map(r.rows, fn(item) {
+      shared_user.UserMiniDto(item.id |> UserId, item.username |> Username)
+    })
+  })
+  |> query_result.map_query_result()
 }

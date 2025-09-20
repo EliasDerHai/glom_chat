@@ -80,12 +80,12 @@ fn validate_and_handle_api_requests(
   db: DbPool,
   sub_paths: List(String),
 ) -> response.Response(wisp.Body) {
-  use req <- middleware.validation_middleware(req, db)
+  use req, session <- middleware.validation_middleware(req, db)
   case sub_paths {
     ["auth", "logout"] -> session.logout(req, db)
     ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
-    ["chats", id] -> chat.chats(req, db, id)
+    ["chats", "conversations"] -> chat.chat_conversations(req, db, session)
 
     _ -> wisp.not_found()
   }
