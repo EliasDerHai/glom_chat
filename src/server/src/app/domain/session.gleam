@@ -86,7 +86,7 @@ fn create_session(
 
   use _ <- result.try(
     conn
-    |> sql.create_session(session_id, user_id.v, expires_at, csrf_secret),
+    |> sql.insert_session(session_id, user_id.v, expires_at, csrf_secret),
   )
 
   Ok(SessionEntity(session_id, user_id, expires_at, csrf_secret))

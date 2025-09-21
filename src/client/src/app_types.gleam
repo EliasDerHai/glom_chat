@@ -6,7 +6,7 @@ import rsvp.{type Error}
 import shared_chat.{type ClientChatMessage}
 import shared_chat_conversation.{type ChatConversationDto}
 import shared_session.{type SessionDto}
-import shared_user.{type UserId, type UserMiniDto}
+import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/toast.{type Toast}
 
 // MODEL -----------------------------------------------------------------------
@@ -36,7 +36,15 @@ pub type LoginState {
     web_socket: SocketState,
     new_conversation: Option(NewConversation),
     selected_conversation: Option(UserMiniDto(UserId)),
-    conversations: Dict(UserMiniDto(UserId), #(List(ClientChatMessage), String)),
+    conversations: Dict(UserId, Conversation),
+  )
+}
+
+pub type Conversation {
+  Conversation(
+    messages: List(ClientChatMessage),
+    conversation_partner: Username,
+    draft_message_text: String,
   )
 }
 
@@ -60,6 +68,7 @@ pub type Msg {
   WsWrapper(WebSocketEvent)
   CheckedAuth(Result(SessionDto, Error))
   NewConversationMsg(NewConversationMsg)
+  UserOnMessageChange(String)
   UserOnSendSubmit
   ApiChatMessageFetchResponse(Result(ChatConversationDto, Error))
   ApiChatMessageSendResponse(Result(ClientChatMessage, Error))

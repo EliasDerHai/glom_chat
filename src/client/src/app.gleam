@@ -1,12 +1,13 @@
 import app_types.{
-  type LoginState, type Model, type Msg, type NewConversation,
+  type Conversation, type LoginState, type Model, type Msg, type NewConversation,
   type NewConversationMsg,
   ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
   ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
-  CheckedAuth, Established, GlobalState, LoggedIn, LoginState, LoginSuccess,
-  Model, NewConversation, NewConversationMsg, Pending, PreLogin, RemoveToast,
-  ShowToast, UserConversationPartnerSelect, UserModalClose, UserModalOpen,
-  UserOnLogoutClick, UserOnSendSubmit, UserSearchInputChange, WsWrapper,
+  CheckedAuth, Conversation, Established, GlobalState, LoggedIn, LoginState,
+  LoginSuccess, Model, NewConversation, NewConversationMsg, Pending, PreLogin,
+  RemoveToast, ShowToast, UserConversationPartnerSelect, UserModalClose,
+  UserModalOpen, UserOnLogoutClick, UserOnMessageChange, UserOnSendSubmit,
+  UserSearchInputChange, WsWrapper,
 }
 import endpoints
 import gleam/dict
@@ -35,7 +36,6 @@ import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import util/button
-import util/dict_extension
 import util/icons
 import util/toast
 import util/toast_state
@@ -84,11 +84,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       ),
       effect.batch([
         ws.init(endpoints.socket_address(), WsWrapper),
-        endpoints.get_request(
-          endpoints.conversations(),
-          shared_chat_conversation.chat_conversation_dto_decoder(),
-          ApiChatConversationsFetchResponse,
-        ),
+        fetch_conversations(),
       ]),
     )
   }
@@ -153,9 +149,17 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### CHAT ###
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
+    UserOnMessageChange(text) -> update_draft_message(model, text)
     UserOnSendSubmit -> #(model, send_message(model))
-    // TODO: 
-    ApiChatMessageSendResponse(_) -> todo
+    ApiChatMessageSendResponse(r) ->
+      case r {
+        Error(_) ->
+          toast_state.show_toast(
+            model,
+            toast.create_error_toast("Couldn't send message..."),
+          )
+        Ok(msg) -> handle_api_chat_message_send_response(model, msg)
+      }
     ApiChatConversationsFetchResponse(r) -> {
       case r {
         Error(_) ->
@@ -167,6 +171,67 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       }
     }
   }
+}
+
+fn update_draft_message(model: Model, text: String) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+  let assert LoginState(
+    session: _,
+    web_socket: _,
+    new_conversation: _,
+    selected_conversation: Some(selected_conversation),
+    conversations:,
+  ) = login_state
+    as "conversation must be selected at this point"
+
+  let conversations =
+    dict.upsert(conversations, selected_conversation.id, fn(curr) {
+      case curr {
+        None -> panic as "conversation doesn't exist"
+        Some(conversation) ->
+          Conversation(..conversation, draft_message_text: text)
+      }
+    })
+
+  let login_state = LoginState(..login_state, conversations:)
+
+  #(Model(LoggedIn(login_state), model.global_state), effect.none())
+}
+
+fn fetch_conversations() -> Effect(Msg) {
+  endpoints.get_request(
+    endpoints.conversations(),
+    shared_chat_conversation.chat_conversation_dto_decoder(),
+    ApiChatConversationsFetchResponse,
+  )
+}
+
+fn handle_api_chat_message_send_response(
+  model: Model,
+  msg: shared_chat.ClientChatMessage,
+) {
+  let app_state = case model.app_state {
+    LoggedIn(l) -> {
+      let conversations =
+        l.conversations
+        |> dict.upsert(msg.receiver, fn(curr) {
+          let assert Some(conversation) = curr
+            as { "Can't find conversation " <> msg.receiver.v }
+
+          Conversation(
+            list.append(conversation.messages, [msg]),
+            conversation.conversation_partner,
+            "",
+          )
+        })
+
+      LoggedIn(LoginState(..l, conversations:))
+    }
+    PreLogin -> model.app_state
+  }
+
+  #(Model(app_state, model.global_state), fetch_conversations())
 }
 
 fn handle_chat_conversation_fetch_response(
@@ -182,12 +247,16 @@ fn handle_chat_conversation_fetch_response(
         True -> item.receiver
       }
     })
-    |> dict.map_values(fn(_, messages) { #(messages, "") })
-    |> dict_extension.map_keys(fn(key) {
-      case others |> list.find(fn(item) { item.id == key }) {
-        Ok(conversation_partner) -> conversation_partner
-        Error(_) -> panic as { "couldn't find conversation partner " <> key.v }
+    |> dict.map_values(fn(user_id, messages) {
+      let conversation_partner = case
+        others |> list.find(fn(item) { item.id == user_id })
+      {
+        Ok(dto) -> dto.username
+        Error(_) ->
+          panic as { "couldn't find conversation partner " <> user_id.v }
       }
+
+      Conversation(messages, conversation_partner, "")
     })
 
   let app_state = case model.app_state {
@@ -227,37 +296,39 @@ fn handle_new_conversation_msg(
     UserConversationPartnerSelect(_) -> #(None, effect.none())
   }
 
-  let #(selected_conversation, conversations, additional_effect) = case msg {
-    ApiSearchResponse(Error(_)) -> {
-      let toast_effect =
-        effect.from(fn(dispatch) {
-          dispatch(
-            ShowToast(toast.create_error_toast("Failed to search users")),
-          )
-        })
+  let #(selected_conversation, conversations, additional_effect) = {
+    case msg {
+      ApiSearchResponse(Error(_)) -> {
+        let toast_effect =
+          effect.from(fn(dispatch) {
+            dispatch(
+              ShowToast(toast.create_error_toast("Failed to search users")),
+            )
+          })
 
-      #(
+        #(
+          login_state.selected_conversation,
+          login_state.conversations,
+          toast_effect,
+        )
+      }
+      UserConversationPartnerSelect(dto) -> {
+        let conversations =
+          dict.upsert(login_state.conversations, dto.id, fn(curr) {
+            case curr {
+              None -> Conversation([], dto.username, "")
+              Some(c) -> c
+            }
+          })
+
+        #(Some(dto), conversations, effect.none())
+      }
+      _ -> #(
         login_state.selected_conversation,
         login_state.conversations,
-        toast_effect,
+        effect.none(),
       )
     }
-    UserConversationPartnerSelect(dto) -> {
-      let next_conversations =
-        dict.upsert(login_state.conversations, dto, fn(curr) {
-          case curr {
-            None -> #([], "")
-            Some(chat_messages) -> chat_messages
-          }
-        })
-
-      #(Some(dto), next_conversations, effect.none())
-    }
-    _ -> #(
-      login_state.selected_conversation,
-      login_state.conversations,
-      effect.none(),
-    )
   }
 
   #(
@@ -265,9 +336,9 @@ fn handle_new_conversation_msg(
       LoggedIn(
         LoginState(
           ..login_state,
+          conversations:,
           new_conversation:,
           selected_conversation:,
-          conversations:,
         ),
       ),
       model.global_state,
@@ -284,11 +355,11 @@ fn send_message(model: Model) -> Effect(Msg) {
     selected_conversation: Some(selected_conversation),
     conversations:,
   )) = model.app_state
-    as "must be logged, conversation selected in at this point"
+    as "must be logged in & conversation selected at this point"
 
-  let draft_text = case dict.get(conversations, selected_conversation) {
+  let draft_text = case dict.get(conversations, selected_conversation.id) {
     Error(_) -> panic as "conversation doesn't exist"
-    Ok(#(_, draft_text)) -> draft_text
+    Ok(conversation) -> conversation.draft_message_text
   }
 
   let draft_message: shared_chat.ClientChatMessage =
@@ -399,9 +470,9 @@ fn view_chat(model: LoginState) -> Element(Msg) {
   let draft_text = case selected_conversation {
     None -> ""
     Some(user) ->
-      case dict.get(conversations, user) {
+      case dict.get(conversations, user.id) {
         Error(_) -> ""
-        Ok(#(_, draft_text)) -> draft_text
+        Ok(conversation) -> conversation.draft_message_text
       }
   }
 
@@ -438,24 +509,35 @@ fn view_chat(model: LoginState) -> Element(Msg) {
         ..conversations
         |> dict.to_list
         |> list.sort(fn(left, right) {
+          let left = left.1
+          let right = right.1
+
           order.break_tie(
             timestamp.compare(
-              latest_message_time(left.1.0),
-              latest_message_time(right.1.0),
+              latest_message_time(left.messages),
+              latest_message_time(right.messages),
             ),
-            string.compare({ left.0 }.username.v, { right.0 }.username.v),
+            string.compare(
+              left.conversation_partner.v,
+              right.conversation_partner.v,
+            ),
           )
         })
-        |> list.map(fn(conversation) {
+        |> list.map(fn(key_value) {
           html.button(
             [
               class("p-4 hover:bg-gray-100 cursor-pointer w-full text-left"),
               event.on_click(
-                NewConversationMsg(UserConversationPartnerSelect(conversation.0)),
+                NewConversationMsg(
+                  UserConversationPartnerSelect(shared_user.UserMiniDto(
+                    key_value.0,
+                    { key_value.1 }.conversation_partner,
+                  )),
+                ),
               ),
             ],
             [
-              html.text({ conversation.0 }.username.v),
+              html.text({ key_value.1 }.conversation_partner.v),
             ],
           )
         })
@@ -503,6 +585,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
             attribute.disabled(selected_conversation |> option.is_none),
             attribute.value(draft_text),
             attribute.placeholder("Message..."),
+            event.on_change(UserOnMessageChange),
           ]),
 
           html.button(
@@ -529,30 +612,22 @@ fn view_chat(model: LoginState) -> Element(Msg) {
 
 fn view_chat_messages(
   selected_conversation: option.Option(UserMiniDto(UserId)),
-  conversations: dict.Dict(
-    UserMiniDto(UserId),
-    #(
-      List(shared_chat.ChatMessage(UserId, shared_chat.ChatMessageDelivery)),
-      String,
-    ),
-  ),
+  conversations: dict.Dict(UserId, Conversation),
 ) -> List(Element(Msg)) {
   case selected_conversation {
     None -> [
       html.p([], [html.text("Select a friend to start chatting...")]),
     ]
-    Some(conversation) -> {
-      case dict.get(conversations, conversation) {
+    Some(dto) -> {
+      case dict.get(conversations, dto.id) {
         Error(_) -> {
-          io.print_error(
-            "couldn't load conversation with" <> conversation.username.v,
-          )
+          io.print_error("couldn't load conversation with" <> dto.username.v)
           [
             html.p([attribute.class("")], [html.text("Conversation not found")]),
           ]
         }
 
-        Ok(#(messages, _draft_text)) -> {
+        Ok(Conversation(messages, _, _)) -> {
           case messages {
             [] -> [
               html.p([class("text-gray-500 text-center")], [

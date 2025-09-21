@@ -5,6 +5,7 @@ import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
 import app/util/query_result
+import gleam/dynamic/decode
 import gleam/http
 import gleam/json
 import gleam/list
@@ -14,7 +15,6 @@ import gleam/set
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import shared_chat_conversation
-import util/dict_extension
 import wisp.{type Request, type Response}
 import youid/uuid
 
@@ -39,6 +39,27 @@ fn message_from_rows(
     sent_time: row.created_at |> option.Some,
     text_content: row.text_content,
   )
+}
+
+fn message_from_shared_message(
+  msg: ClientChatMessage,
+) -> Result(ServerChatMessage, Nil) {
+  use sender <- result.try(msg.sender |> user.from_shared_user_id)
+  use receiver <- result.try(msg.receiver |> user.from_shared_user_id)
+
+  ChatMessage(
+    sender:,
+    receiver:,
+    delivery: case msg.delivery {
+      shared_chat.Delivered -> sql.Delivered
+      shared_chat.Read -> sql.Read
+      shared_chat.Sent -> sql.Read
+      _ -> sql.Sent
+    },
+    sent_time: msg.sent_time,
+    text_content: msg.text_content,
+  )
+  |> Ok
 }
 
 fn to_shared_message(msg: ServerChatMessage) -> ClientChatMessage {
@@ -77,6 +98,21 @@ pub fn get_chat_messages_for_user(
   })
 }
 
+pub fn insert_chat_message(
+  db: DbPool,
+  msg: ChatMessage(UserId, ChatMessageDelivery),
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  db
+  |> pool.conn
+  |> sql.insert_chat_message(
+    uuid.v7(),
+    msg.sender.v,
+    msg.receiver.v,
+    msg.delivery,
+    msg.text_content,
+  )
+}
+
 // ################################################################################
 // Endpoints
 // ################################################################################
@@ -113,6 +149,39 @@ pub fn chat_conversations(
     |> shared_chat_conversation.chat_conversation_dto_to_json
     |> json.to_string
     |> wisp.json_response(200)
+    |> Ok
+  }
+  |> result.unwrap_both()
+}
+
+pub fn post_chat_message(req: Request, db: DbPool) -> Response {
+  use <- wisp.require_method(req, http.Post)
+  use json <- wisp.require_json(req)
+
+  {
+    use msg <- result.try(
+      json
+      |> decode.run(shared_chat.chat_message_decoder())
+      |> result.map_error(fn(_) {
+        wisp.bad_request("can't decode chat_message")
+      })
+      |> result.map(fn(r) {
+        message_from_shared_message(r)
+        |> result.map_error(fn(_) { wisp.bad_request("can't decode user_ids") })
+      })
+      |> result.flatten,
+    )
+
+    use _ <- result.try(
+      insert_chat_message(db, msg)
+      |> query_result.map_query_result(),
+    )
+
+    msg
+    |> to_shared_message
+    |> shared_chat.chat_message_to_json
+    |> json.to_string
+    |> wisp.json_response(201)
     |> Ok
   }
   |> result.unwrap_both()

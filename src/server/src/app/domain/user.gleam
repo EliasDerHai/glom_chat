@@ -24,6 +24,12 @@ pub fn unpack(user_id: UserId) {
   user_id.v
 }
 
+pub fn from_shared_user_id(id: shared_user.UserId) -> Result(UserId, Nil) {
+  id.v
+  |> uuid.from_string
+  |> result.map(fn(uuid) { uuid |> UserId })
+}
+
 pub fn to_shared_user_id(id: UserId) -> shared_user.UserId {
   id.v |> uuid.to_string |> shared_user.UserId
 }
@@ -115,7 +121,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
   let result = {
     let user_id = uuid.v7()
-    let conn = pog.named_connection(db.name)
+    let conn = db |> pool.conn
 
     use dto <- result.try(
       decode.run(json, shared_user.decode_create_user_dto())
@@ -134,7 +140,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
     use _ <- result.try(
       conn
-      |> sql.create_user(
+      |> sql.insert_user(
         user_id,
         dto.username.v,
         dto.email,

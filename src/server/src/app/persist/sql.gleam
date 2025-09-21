@@ -10,61 +10,6 @@ import gleam/time/timestamp.{type Timestamp}
 import pog
 import youid/uuid.{type Uuid}
 
-/// Runs the `create_session` query
-/// defined in `./src/app/persist/sql/create_session.sql`.
-///
-/// > 🐿️ This function was generated automatically using v4.4.1 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn create_session(
-  db: pog.Connection,
-  arg_1: Uuid,
-  arg_2: Uuid,
-  arg_3: Timestamp,
-  arg_4: String,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "INSERT INTO sessions (id, user_id, expires_at, csrf_secret)
-VALUES ($1, $2, $3, $4);"
-  |> pog.query
-  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
-  |> pog.parameter(pog.text(uuid.to_string(arg_2)))
-  |> pog.parameter(pog.timestamp(arg_3))
-  |> pog.parameter(pog.text(arg_4))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-/// Runs the `create_user` query
-/// defined in `./src/app/persist/sql/create_user.sql`.
-///
-/// > 🐿️ This function was generated automatically using v4.4.1 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn create_user(
-  db: pog.Connection,
-  arg_1: Uuid,
-  arg_2: String,
-  arg_3: String,
-  arg_4: Bool,
-  arg_5: String,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "INSERT INTO users (id, username, email, email_verified, password_hash)
-VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
-"
-  |> pog.query
-  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
-  |> pog.parameter(pog.text(arg_2))
-  |> pog.parameter(pog.text(arg_3))
-  |> pog.parameter(pog.bool(arg_4))
-  |> pog.parameter(pog.text(arg_5))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
 /// Runs the `delete_expired_sessions` query
 /// defined in `./src/app/persist/sql/delete_expired_sessions.sql`.
 ///
@@ -118,6 +63,90 @@ pub fn delete_user(
 "
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `insert_chat_message` query
+/// defined in `./src/app/persist/sql/insert_chat_message.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn insert_chat_message(
+  db: pog.Connection,
+  arg_1: Uuid,
+  arg_2: Uuid,
+  arg_3: Uuid,
+  arg_4: ChatMessageDelivery,
+  arg_5: List(String),
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO chat_messages (id, sender_id, receiver_id, delivery, text_content)
+VALUES ($1, $2, $3, $4, $5);
+"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.parameter(pog.text(uuid.to_string(arg_2)))
+  |> pog.parameter(pog.text(uuid.to_string(arg_3)))
+  |> pog.parameter(chat_message_delivery_encoder(arg_4))
+  |> pog.parameter(pog.array(fn(value) { pog.text(value) }, arg_5))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `insert_session` query
+/// defined in `./src/app/persist/sql/insert_session.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn insert_session(
+  db: pog.Connection,
+  arg_1: Uuid,
+  arg_2: Uuid,
+  arg_3: Timestamp,
+  arg_4: String,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO sessions (id, user_id, expires_at, csrf_secret)
+VALUES ($1, $2, $3, $4);"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.parameter(pog.text(uuid.to_string(arg_2)))
+  |> pog.parameter(pog.timestamp(arg_3))
+  |> pog.parameter(pog.text(arg_4))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `insert_user` query
+/// defined in `./src/app/persist/sql/insert_user.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn insert_user(
+  db: pog.Connection,
+  arg_1: Uuid,
+  arg_2: String,
+  arg_3: String,
+  arg_4: Bool,
+  arg_5: String,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO users (id, username, email, email_verified, password_hash)
+VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
+"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(arg_3))
+  |> pog.parameter(pog.bool(arg_4))
+  |> pog.parameter(pog.text(arg_5))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -546,6 +575,15 @@ fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
     "sent" -> decode.success(Sent)
     _ -> decode.failure(Read, "ChatMessageDelivery")
   }
+}
+
+fn chat_message_delivery_encoder(chat_message_delivery) -> pog.Value {
+  case chat_message_delivery {
+    Read -> "read"
+    Delivered -> "delivered"
+    Sent -> "sent"
+  }
+  |> pog.text
 }
 
 // --- Encoding/decoding utils -------------------------------------------------
