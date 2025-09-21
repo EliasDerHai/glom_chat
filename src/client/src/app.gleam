@@ -95,9 +95,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     case result {
       Ok(_) ->
         case model.app_state {
-          LoggedIn(LoginState(_, Established(sock), ..)) -> #(
+          LoggedIn(LoginState(_, Established(_sock), ..)) -> #(
             login_model,
-            ws.close(sock),
+            effect.none(),
+            // FIXME: ws close causes runtime error
+          // ws.close(sock),
           )
           LoggedIn(_) -> #(login_model, effect.none())
           PreLogin -> noop
