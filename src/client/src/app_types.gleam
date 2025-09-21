@@ -2,8 +2,9 @@ import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
-import rsvp
+import rsvp.{type Error}
 import shared_chat.{type ClientChatMessage}
+import shared_chat_conversation.{type ChatConversationDto}
 import shared_session.{type SessionDto}
 import shared_user.{type UserId, type UserMiniDto}
 import util/toast.{type Toast}
@@ -35,7 +36,7 @@ pub type LoginState {
     web_socket: SocketState,
     new_conversation: Option(NewConversation),
     selected_conversation: Option(UserMiniDto(UserId)),
-    conversations: Dict(UserMiniDto(UserId), List(ClientChatMessage)),
+    conversations: Dict(UserMiniDto(UserId), #(List(ClientChatMessage), String)),
   )
 }
 
@@ -53,21 +54,21 @@ pub type SocketState {
 pub type Msg {
   LoginSuccess(SessionDto)
   UserOnLogoutClick
-  ApiOnLogoutResponse(Result(Nil, rsvp.Error))
+  ApiOnLogoutResponse(Result(Nil, Error))
   ShowToast(Toast)
   RemoveToast(Int)
   WsWrapper(WebSocketEvent)
-  CheckedAuth(Result(SessionDto, rsvp.Error))
+  CheckedAuth(Result(SessionDto, Error))
   NewConversationMsg(NewConversationMsg)
   UserOnSendSubmit
-  ApiChatMessageFetchResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
-  ApiChatMessageSendResponse(Result(shared_chat.ClientChatMessage, rsvp.Error))
+  ApiChatMessageFetchResponse(Result(ChatConversationDto, Error))
+  ApiChatMessageSendResponse(Result(ClientChatMessage, Error))
 }
 
 pub type NewConversationMsg {
   UserModalOpen
   UserModalClose
   UserSearchInputChange(String)
-  ApiSearchResponse(Result(List(UserMiniDto(UserId)), rsvp.Error))
+  ApiSearchResponse(Result(List(UserMiniDto(UserId)), Error))
   UserConversationPartnerSelect(UserMiniDto(UserId))
 }

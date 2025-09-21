@@ -1,15 +1,34 @@
 import gleam/dynamic/decode
 import gleam/json
 
+// UserId ----------------------------------------------------------------------
 pub type UserId {
   /// Uuid on server
   UserId(v: String)
 }
 
+pub fn user_id_to_json(user_id: UserId) -> json.Json {
+  json.string(user_id.v)
+}
+
+pub fn user_id_decoder() -> decode.Decoder(UserId) {
+  decode.string |> decode.map(fn(v) { UserId(v) })
+}
+
+// Username ----------------------------------------------------------------------
 pub type Username {
   Username(v: String)
 }
 
+pub fn username_to_json(username: Username) -> json.Json {
+  json.string(username.v)
+}
+
+pub fn username_decoder() -> decode.Decoder(Username) {
+  decode.string |> decode.map(fn(v) { Username(v) })
+}
+
+// UserDto ----------------------------------------------------------------------
 pub type UserDto {
   UserDto(id: UserId, username: Username, email: String, email_verified: Bool)
 }
@@ -43,7 +62,7 @@ pub fn to_json(user: UserDto) -> json.Json {
 }
 
 // SIGNUP
-
+// CreateUserDto  ----------------------------------------------------------------------
 pub type CreateUserDto {
   CreateUserDto(username: Username, email: String, password: String)
 }
@@ -72,7 +91,7 @@ pub fn create_user_dto_to_json(create_user: CreateUserDto) -> json.Json {
 }
 
 // LOGIN
-
+// UserLoginDto ----------------------------------------------------------------------
 pub type UserLoginDto {
   UserLoginDto(username: String, password: String)
 }
@@ -95,7 +114,7 @@ pub fn user_loging_dto_to_json(user_login: UserLoginDto) -> json.Json {
 }
 
 // USERS_BY_USERNAME
-
+// UsersByUsernameDto ----------------------------------------------------------------------
 pub type UsersByUsernameDto {
   UsersByUsernameDto(username: Username)
 }
@@ -114,7 +133,7 @@ pub fn users_by_username_dto_to_json(dto: UsersByUsernameDto) -> json.Json {
   ])
 }
 
-// USER_ID USERNAME TUPLE
+// UserMiniDto ----------------------------------------------------------------------
 pub type UserMiniDto(user_id) {
   UserMiniDto(id: user_id, username: Username)
 }

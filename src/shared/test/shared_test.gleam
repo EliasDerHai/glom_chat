@@ -4,7 +4,8 @@ import gleam/option
 import gleam/time/timestamp
 import gleeunit
 import shared_chat.{ChatMessage}
-import shared_user.{UserDto, UserId}
+import shared_chat_conversation.{ChatConversationDto}
+import shared_user.{UserDto, UserId, UserMiniDto}
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -120,6 +121,77 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
   let json_text = json.to_string(actual)
   let assert Ok(actual) =
     json.parse(from: json_text, using: shared_chat.chat_message_decoder())
+
+  // assert deserialize
+  assert_equal(input, actual)
+}
+
+pub fn chat_conversation_dto_json_roundtrip_test() {
+  // arrange
+  let input =
+    ChatConversationDto(
+      messages: [
+        ChatMessage(
+          sender: "sender-id" |> UserId,
+          receiver: "receiver-id" |> UserId,
+          delivery: shared_chat.Sent,
+          sent_time: option.Some(timestamp.from_unix_seconds(1_692_859_999)),
+          text_content: ["Hello"],
+        ),
+      ],
+      self: "self-id" |> UserId,
+      others: [
+        UserMiniDto(
+          id: "other-id" |> UserId,
+          username: "Other User" |> shared_user.Username,
+        ),
+      ],
+    )
+
+  // act serialize
+  let actual = input |> shared_chat_conversation.chat_conversation_dto_to_json()
+
+  // assert serialize
+  let expected =
+    json.object([
+      #(
+        "messages",
+        json.array(
+          [
+            json.object([
+              #("sender", json.string("sender-id")),
+              #("receiver", json.string("receiver-id")),
+              #("delivery", json.string("sent")),
+              #("sent_time", json.int(1_692_859_999)),
+              #("text_content", json.array(["Hello"], json.string)),
+            ]),
+          ],
+          fn(x) { x },
+        ),
+      ),
+      #("self", json.string("self-id")),
+      #(
+        "others",
+        json.array(
+          [
+            json.object([
+              #("id", json.string("other-id")),
+              #("username", json.string("Other User")),
+            ]),
+          ],
+          fn(x) { x },
+        ),
+      ),
+    ])
+  assert_equal(expected, actual)
+
+  // act deserialize
+  let json_text = json.to_string(actual)
+  let assert Ok(actual) =
+    json.parse(
+      from: json_text,
+      using: shared_chat_conversation.chat_conversation_dto_decoder(),
+    )
 
   // assert deserialize
   assert_equal(input, actual)

@@ -239,3 +239,9 @@ pub fn select_users_by_ids(
   })
   |> query_result.map_query_result()
 }
+
+pub fn to_shared_user_mini(
+  dto: UserMiniDto(UserId),
+) -> UserMiniDto(shared_user.UserId) {
+  shared_user.UserMiniDto(dto.id |> to_shared_user_id, dto.username)
+}

@@ -5,7 +5,6 @@ import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
 import app/util/query_result
-import gleam/dict
 import gleam/http
 import gleam/json
 import gleam/list
@@ -14,6 +13,7 @@ import gleam/result
 import gleam/set
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
+import shared_chat_conversation
 import util/dict_extension
 import wisp.{type Request, type Response}
 import youid/uuid
@@ -90,13 +90,13 @@ pub fn chat_conversations(
   use <- wisp.require_method(req, http.Get)
 
   {
-    use chat_messages: List(ChatMessage(UserId, ChatMessageDelivery)) <- result.try(
+    use messages: List(ChatMessage(UserId, ChatMessageDelivery)) <- result.try(
       get_chat_messages_for_user(db, session.user_id)
       |> query_result.map_query_result(),
     )
 
     let conversation_partners =
-      chat_messages
+      messages
       |> list.flat_map(fn(item) { [item.receiver, item.sender] })
       |> set.from_list()
       |> set.filter(fn(item) { item != session.user_id })
@@ -105,35 +105,15 @@ pub fn chat_conversations(
       db |> user.select_users_by_ids(conversation_partners),
     )
 
-    let conversations =
-      chat_messages
-      |> list.group(fn(item) {
-        case item.sender == session.user_id {
-          False -> item.sender
-          True -> item.receiver
-        }
-      })
-      |> dict_extension.map_keys(fn(key) {
-        case
-          conversation_partners
-          |> list.find(fn(item) { item.id == key })
-        {
-          Ok(conversation_partner) -> conversation_partner
-          Error(_) ->
-            panic as {
-                "couldn't find conversation partner " <> key.v |> uuid.to_string
-              }
-        }
-      })
-
-    let jsons =
-      json.array(chat_messages, fn(msg) {
-        msg |> to_shared_message |> shared_chat.chat_message_to_json
-        // TODO: actual mapping of dict
-        todo
-      })
-
-    wisp.json_response(jsons |> json.to_string, 200) |> Ok
+    shared_chat_conversation.ChatConversationDto(
+      messages: messages |> list.map(to_shared_message),
+      self: session.user_id |> user.to_shared_user_id,
+      others: conversation_partners |> list.map(user.to_shared_user_mini),
+    )
+    |> shared_chat_conversation.chat_conversation_dto_to_json
+    |> json.to_string
+    |> wisp.json_response(200)
+    |> Ok
   }
   |> result.unwrap_both()
 }

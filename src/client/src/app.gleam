@@ -22,18 +22,20 @@ import gleam/string
 import gleam/time/calendar
 import gleam/time/timestamp
 import lustre
-import lustre/attribute.{class, placeholder}
+import lustre/attribute.{class}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import lustre_websocket as ws
 import pre_login
-import rsvp
-import shared_chat.{type ClientChatMessage}
+import rsvp.{type Error}
+import shared_chat.{type ClientChatMessage, ChatMessage}
+import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import util/button
+import util/dict_extension
 import util/icons
 import util/toast
 import util/toast_state
@@ -83,15 +85,15 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       effect.batch([
         ws.init(endpoints.socket_address(), WsWrapper),
         endpoints.get_request(
-          endpoints.chats(),
-          shared_chat.chat_message_decoder(),
-          todo,
+          endpoints.conversations(),
+          shared_chat_conversation.chat_conversation_dto_decoder(),
+          ApiChatConversationsFetchResponse,
         ),
       ]),
     )
   }
 
-  let logout = fn(result: Result(Nil, rsvp.Error)) -> #(Model, Effect(Msg)) {
+  let logout = fn(result: Result(Nil, Error)) -> #(Model, Effect(Msg)) {
     let login_model = Model(PreLogin, model.global_state)
 
     case result {
@@ -154,8 +156,46 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     UserOnSendSubmit -> #(model, send_message(model))
     // TODO: 
     ApiChatMessageSendResponse(_) -> todo
-    ApiChatConversationsFetchResponse(_) -> todo
+    ApiChatConversationsFetchResponse(r) -> {
+      case r {
+        Error(_) ->
+          toast_state.show_toast(
+            model,
+            toast.create_error_toast("Failed to load conversations..."),
+          )
+        Ok(dto) -> handle_chat_conversation_fetch_response(model, dto)
+      }
+    }
   }
+}
+
+fn handle_chat_conversation_fetch_response(
+  model: Model,
+  dto: ChatConversationDto,
+) -> #(Model, Effect(Msg)) {
+  let ChatConversationDto(messages, self, others) = dto
+  let conversations =
+    messages
+    |> list.group(fn(item) {
+      case item.sender == self {
+        False -> item.sender
+        True -> item.receiver
+      }
+    })
+    |> dict.map_values(fn(_, messages) { #(messages, "") })
+    |> dict_extension.map_keys(fn(key) {
+      case others |> list.find(fn(item) { item.id == key }) {
+        Ok(conversation_partner) -> conversation_partner
+        Error(_) -> panic as { "couldn't find conversation partner " <> key.v }
+      }
+    })
+
+  let app_state = case model.app_state {
+    LoggedIn(l) -> LoggedIn(LoginState(..l, conversations:))
+    PreLogin -> model.app_state
+  }
+
+  #(Model(app_state, model.global_state), effect.none())
 }
 
 fn handle_new_conversation_msg(
@@ -206,7 +246,7 @@ fn handle_new_conversation_msg(
       let next_conversations =
         dict.upsert(login_state.conversations, dto, fn(curr) {
           case curr {
-            None -> []
+            None -> #([], "")
             Some(chat_messages) -> chat_messages
           }
         })
@@ -237,28 +277,32 @@ fn handle_new_conversation_msg(
 }
 
 fn send_message(model: Model) -> Effect(Msg) {
-  let assert LoggedIn(login_state) = model.app_state
-    as "must be logged in at this point"
+  let assert LoggedIn(LoginState(
+    session:,
+    web_socket: _,
+    new_conversation: _,
+    selected_conversation: Some(selected_conversation),
+    conversations:,
+  )) = model.app_state
+    as "must be logged, conversation selected in at this point"
 
-  let assert Ok(draft) =
-    login_state.conversations
-    |> dict.to_list
-    |> list.find_map(fn(item) {
-      let #(user, messages) = item
-      case
-        option.Some({ user }.id)
-        == option.map(login_state.selected_conversation, fn(conv) { conv.id })
-      {
-        True ->
-          list.find(messages, fn(msg) { msg.delivery == shared_chat.Draft })
-        False -> Error(Nil)
-      }
-    })
-    as "shouldn't be allowed to send without draft msg"
+  let draft_text = case dict.get(conversations, selected_conversation) {
+    Error(_) -> panic as "conversation doesn't exist"
+    Ok(#(_, draft_text)) -> draft_text
+  }
+
+  let draft_message: shared_chat.ClientChatMessage =
+    ChatMessage(
+      sender: session.user_id,
+      receiver: selected_conversation.id,
+      delivery: shared_chat.Sending,
+      sent_time: None,
+      text_content: draft_text |> string.split("\n"),
+    )
 
   endpoints.post_request(
     endpoints.chats(),
-    draft |> shared_chat.chat_message_to_json,
+    draft_message |> shared_chat.chat_message_to_json,
     shared_chat.chat_message_decoder(),
     ApiChatMessageSendResponse,
   )
@@ -352,6 +396,15 @@ fn view_chat(model: LoginState) -> Element(Msg) {
   let LoginState(session, _, new_conv, selected_conversation, conversations) =
     model
 
+  let draft_text = case selected_conversation {
+    None -> ""
+    Some(user) ->
+      case dict.get(conversations, user) {
+        Error(_) -> ""
+        Ok(#(_, draft_text)) -> draft_text
+      }
+  }
+
   html.div([class("flex h-screen bg-gray-50 text-gray-800")], [
     // Sidebar
     html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
@@ -365,7 +418,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
           class(
             "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
           ),
-          placeholder("Search chats..."),
+          attribute.placeholder("Search chats..."),
         ]),
       ]),
       // Chat List
@@ -387,8 +440,8 @@ fn view_chat(model: LoginState) -> Element(Msg) {
         |> list.sort(fn(left, right) {
           order.break_tie(
             timestamp.compare(
-              latest_message_time(left.1),
-              latest_message_time(right.1),
+              latest_message_time(left.1.0),
+              latest_message_time(right.1.0),
             ),
             string.compare({ left.0 }.username.v, { right.0 }.username.v),
           )
@@ -448,7 +501,8 @@ fn view_chat(model: LoginState) -> Element(Msg) {
               <> "disabled:bg-gray-100 ",
             ),
             attribute.disabled(selected_conversation |> option.is_none),
-            placeholder("Message..."),
+            attribute.value(draft_text),
+            attribute.placeholder("Message..."),
           ]),
 
           html.button(
@@ -477,7 +531,10 @@ fn view_chat_messages(
   selected_conversation: option.Option(UserMiniDto(UserId)),
   conversations: dict.Dict(
     UserMiniDto(UserId),
-    List(shared_chat.ChatMessage(UserId, shared_chat.ChatMessageDelivery)),
+    #(
+      List(shared_chat.ChatMessage(UserId, shared_chat.ChatMessageDelivery)),
+      String,
+    ),
   ),
 ) -> List(Element(Msg)) {
   case selected_conversation {
@@ -495,7 +552,7 @@ fn view_chat_messages(
           ]
         }
 
-        Ok(messages) -> {
+        Ok(#(messages, _draft_text)) -> {
           case messages {
             [] -> [
               html.p([class("text-gray-500 text-center")], [
@@ -545,7 +602,7 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
               class(
                 "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
               ),
-              placeholder("Search user..."),
+              attribute.placeholder("Search user..."),
               event.on_input(fn(value) {
                 NewConversationMsg(UserSearchInputChange(value))
               }),
