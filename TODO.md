@@ -2,6 +2,10 @@
 
 ## Backend
 
+Db alternatives 
+- Supabase
+- Prims
+
 ### Core Features
 - [ ] Implement real-time chat messaging
 - [ ] Add cache for sessions (no db-trip for every request)

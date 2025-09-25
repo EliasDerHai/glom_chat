@@ -34,9 +34,13 @@ import rsvp.{type Error}
 import shared_chat.{type ClientChatMessage, ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
-import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
+import shared_user.{
+  type UserId, type UserMiniDto, type Username, Username, UsersByUsernameDto,
+}
 import util/button
 import util/icons
+import util/option_extension
+import util/time_util
 import util/toast
 import util/toast_state
 
@@ -573,7 +577,11 @@ fn view_chat(model: LoginState) -> Element(Msg) {
       // Chat messages area
       html.main(
         [class("flex-1 p-4 overflow-y-auto")],
-        view_chat_messages(selected_conversation, conversations),
+        view_chat_messages(
+          selected_conversation,
+          conversations,
+          session.user_id,
+        ),
       ),
 
       // Message input area
@@ -615,6 +623,7 @@ fn view_chat(model: LoginState) -> Element(Msg) {
 fn view_chat_messages(
   selected_conversation: option.Option(UserMiniDto(UserId)),
   conversations: dict.Dict(UserId, Conversation),
+  self: UserId,
 ) -> List(Element(Msg)) {
   case selected_conversation {
     None -> [
@@ -638,7 +647,19 @@ fn view_chat_messages(
             ]
             _ ->
               messages
-              |> list.map(view_chat_message)
+              |> list.sort(fn(a, b) {
+                let time_or_utc_zero = fn(o) {
+                  o |> option.unwrap(timestamp.from_unix_seconds(0))
+                }
+
+                timestamp.compare(
+                  a.sent_time |> time_or_utc_zero,
+                  b.sent_time |> time_or_utc_zero,
+                )
+              })
+              |> list.map(fn(message) {
+                view_chat_message(message, self, dto.username)
+              })
           }
         }
       }
@@ -720,35 +741,33 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
   ])
 }
 
-fn view_chat_message(message: ClientChatMessage) -> Element(Msg) {
-  let is_draft = message.delivery == shared_chat.Draft
-  let message_class = case is_draft {
-    True -> "bg-yellow-100 border-yellow-200 text-yellow-800"
-    False -> "bg-blue-50 border-blue-200"
+fn view_chat_message(
+  message: ClientChatMessage,
+  self: UserId,
+  other: Username,
+) -> Element(Msg) {
+  let self_is_sender = message.sender == self
+
+  let message_class = case self_is_sender {
+    False -> "bg-gray-50 border-gray-200"
+    True -> "bg-blue-50 border-blue-200"
   }
 
   html.div([class("mb-3 p-3 rounded-lg border " <> message_class)], [
     html.div([class("flex justify-between items-start mb-1")], [
       html.span([class("font-medium text-sm")], [
-        html.text(case is_draft {
-          True -> "Draft"
-          False -> "You"
+        html.text(case self_is_sender {
+          True -> "You"
+          False -> other.v
         }),
       ]),
-      case message.sent_time {
-        Some(time) -> {
-          let #(_date, time_of_day) =
-            timestamp.to_calendar(time, calendar.utc_offset)
-          let hours =
-            int.to_string(time_of_day.hours) |> string.pad_start(2, "0")
-          let minutes =
-            int.to_string(time_of_day.minutes) |> string.pad_start(2, "0")
-          html.span([class("text-xs text-gray-500")], [
-            html.text(hours <> ":" <> minutes),
-          ])
-        }
-        None -> html.span([], [])
-      },
+      html.span(
+        [class("text-xs text-gray-500")],
+        message.sent_time
+          |> option.map(time_util.to_hhmm)
+          |> option.map(html.text)
+          |> option_extension.to_list,
+      ),
     ]),
     html.p([class("text-sm")], [
       html.text(string.join(message.text_content, " ")),

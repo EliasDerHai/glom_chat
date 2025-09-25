@@ -22,7 +22,7 @@ fn get_socket_url() -> String {
   }
 }
 
-@external(javascript, "./location_ffi.mjs", "getOrigin")
+@external(javascript, "./util/location_ffi.mjs", "getOrigin")
 fn get_origin() -> String
 
 pub fn me() {
