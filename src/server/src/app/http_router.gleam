@@ -5,6 +5,7 @@ import app/domain/user
 import app/environment
 import app/middleware
 import app/persist/pool.{type DbPool}
+import app/registry.{type SocketRegistry}
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
@@ -18,27 +19,36 @@ import wisp/wisp_mist
 pub fn handle_http_request(
   db: DbPool,
   secret_key: String,
+  registry: SocketRegistry,
 ) -> fn(MistRequest) -> response.Response(mist.ResponseData) {
   wisp_mist.handler(
-    fn(req: wisp.Request) { handle_request(req, db) },
+    fn(req: wisp.Request) { handle_request(req, db, registry) },
     secret_key,
   )
 }
 
-fn handle_request(req: wisp.Request, db: DbPool) -> Response {
+fn handle_request(
+  req: wisp.Request,
+  db: DbPool,
+  registry: SocketRegistry,
+) -> Response {
   use req <- middleware.default_middleware(req)
 
   // Handle CORS preflight requests
   case req.method {
     Options -> wisp.ok() |> wisp.string_body("")
-    _ -> handle_routes(req, db)
+    _ -> handle_routes(req, db, registry)
   }
 }
 
-fn handle_routes(req: wisp.Request, db: DbPool) -> Response {
+fn handle_routes(
+  req: wisp.Request,
+  db: DbPool,
+  registry: SocketRegistry,
+) -> Response {
   case wisp.path_segments(req) {
     [] | [_] -> serve_static_file(req)
-    ["api", ..sub_paths] -> handle_api_routes(req, db, sub_paths)
+    ["api", ..sub_paths] -> handle_api_routes(req, db, registry, sub_paths)
     _ -> wisp.not_found()
   }
 }
@@ -46,6 +56,7 @@ fn handle_routes(req: wisp.Request, db: DbPool) -> Response {
 fn handle_api_routes(
   req: wisp.Request,
   db: DbPool,
+  registry: SocketRegistry,
   sub_paths: List(String),
 ) -> Response {
   case sub_paths {
@@ -70,7 +81,7 @@ fn handle_api_routes(
       }
     }
 
-    _ -> validate_and_handle_api_requests(req, db, sub_paths)
+    _ -> validate_and_handle_api_requests(req, db, registry, sub_paths)
   }
 }
 
@@ -78,6 +89,7 @@ fn handle_api_routes(
 fn validate_and_handle_api_requests(
   req: wisp.Request,
   db: DbPool,
+  registry: SocketRegistry,
   sub_paths: List(String),
 ) -> response.Response(wisp.Body) {
   use req, session <- middleware.validation_middleware(req, db)
@@ -86,7 +98,7 @@ fn validate_and_handle_api_requests(
     ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
     ["chats", "conversations"] -> chat.chat_conversations(req, db, session)
-    ["chats"] -> chat.post_chat_message(req, db)
+    ["chats"] -> chat.post_chat_message(req, db, registry)
 
     _ -> wisp.not_found()
   }

@@ -648,8 +648,8 @@ fn view_chat_messages(
             _ ->
               messages
               |> list.sort(fn(a, b) {
-                let time_or_utc_zero = fn(o) {
-                  o |> option.unwrap(timestamp.from_unix_seconds(0))
+                let time_or_utc_zero = fn(option_time) {
+                  option_time |> option.unwrap(timestamp.from_unix_seconds(0))
                 }
 
                 timestamp.compare(

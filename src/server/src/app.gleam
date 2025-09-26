@@ -30,7 +30,8 @@ pub fn main() {
       case request.path_segments(req) {
         ["ws"] ->
           websocket.handle_ws_request(db, socket_registry, secret_key)(req)
-        _ -> http_router.handle_http_request(db, secret_key)(req)
+        _ ->
+          http_router.handle_http_request(db, secret_key, socket_registry)(req)
       }
     }
     |> mist.new

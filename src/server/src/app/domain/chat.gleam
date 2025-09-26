@@ -4,17 +4,21 @@ import app/persist/pool.{type DbPool}
 import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
+import app/registry.{type SocketRegistry}
 import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http
 import gleam/json
 import gleam/list
 import gleam/option
+import gleam/otp/actor
 import gleam/result
 import gleam/set
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import shared_chat_conversation
+import shared_socket_message
+import shared_user
 import wisp.{type Request, type Response}
 import youid/uuid
 
@@ -154,7 +158,11 @@ pub fn chat_conversations(
   |> result.unwrap_both()
 }
 
-pub fn post_chat_message(req: Request, db: DbPool) -> Response {
+pub fn post_chat_message(
+  req: Request,
+  db: DbPool,
+  registry: SocketRegistry,
+) -> Response {
   use <- wisp.require_method(req, http.Post)
   use json <- wisp.require_json(req)
 
@@ -175,6 +183,14 @@ pub fn post_chat_message(req: Request, db: DbPool) -> Response {
     use _ <- result.try(
       insert_chat_message(db, msg)
       |> query_result.map_query_result(),
+    )
+
+    actor.send(
+      registry,
+      registry.SendMessage(
+        msg.receiver,
+        shared_socket_message.NewMessage(msg.sender |> user.to_shared_user_id),
+      ),
     )
 
     msg

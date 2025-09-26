@@ -1,11 +1,10 @@
 import app/domain/session
 import app/domain/user.{type UserId}
 import app/persist/pool.{type DbPool}
-import app/registry.{type RegistryMessage, Register, Unregister}
+import app/registry.{type SocketRegistry, Register, Unregister}
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
-import gleam/erlang/process
 import gleam/io
 import gleam/option
 import gleam/otp/actor
@@ -19,7 +18,7 @@ pub type WsState {
 
 pub fn handle_ws_request(
   db: DbPool,
-  registry: process.Subject(RegistryMessage),
+  registry: SocketRegistry,
   secret_key: String,
 ) {
   fn(mist_req: MistRequest) {
@@ -43,8 +42,7 @@ pub fn handle_ws_request(
         actor.send(registry, Register(session.user_id, conn))
 
         // Store the user_id in this connection's state
-        let state = WsState(user_id: session.user_id)
-        #(state, option.None)
+        #(session.user_id |> WsState, option.None)
       },
       on_close: fn(state) {
         // On close, send a message to unregister this user
@@ -83,11 +81,9 @@ fn handle_text_messages(
   }
 
   case r {
-    Error(error_reason) -> {
-      let error_string = string.inspect(error_reason)
-      io.println("Error sending websocket frame: " <> error_string)
-      Nil
-    }
+    Error(error_reason) ->
+      { "Error sending websocket frame: " <> error_reason |> string.inspect }
+      |> io.println_error
     Ok(Nil) -> Nil
   }
 }
