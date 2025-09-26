@@ -14,11 +14,12 @@ import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/set
+import gleam/time/calendar
+import gleam/time/timestamp
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import shared_chat_conversation
 import shared_socket_message
-import shared_user
 import wisp.{type Request, type Response}
 import youid/uuid
 
@@ -57,7 +58,7 @@ fn message_from_shared_message(
     delivery: case msg.delivery {
       shared_chat.Delivered -> sql.Delivered
       shared_chat.Read -> sql.Read
-      shared_chat.Sent -> sql.Read
+      shared_chat.Sent -> sql.Sent
       _ -> sql.Sent
     },
     sent_time: msg.sent_time,
@@ -180,6 +181,12 @@ pub fn post_chat_message(
       |> result.flatten,
     )
 
+    let local_now =
+      timestamp.system_time() |> timestamp.add(calendar.local_offset())
+
+    let msg =
+      ChatMessage(..msg, delivery: sql.Sent, sent_time: option.Some(local_now))
+
     use _ <- result.try(
       insert_chat_message(db, msg)
       |> query_result.map_query_result(),
@@ -189,7 +196,7 @@ pub fn post_chat_message(
       registry,
       registry.SendMessage(
         msg.receiver,
-        shared_socket_message.NewMessage(msg.sender |> user.to_shared_user_id),
+        shared_socket_message.NewMessage(msg |> to_shared_message),
       ),
     )
 

@@ -1,18 +1,19 @@
 import gleam/dynamic/decode
 import gleam/json.{type Json}
+import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, UserId}
 
 pub type SocketMessage {
-  NewMessage(sender: UserId)
+  NewMessage(message: ClientChatMessage)
   IsTyping(user: UserId)
 }
 
 pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
   case socket_message {
-    NewMessage(sender:) ->
+    NewMessage(message:) ->
       json.object([
         #("type", json.string("new_message")),
-        #("sender", sender |> shared_user.user_id_to_json()),
+        #("message", message |> shared_chat.chat_message_to_json()),
       ])
     IsTyping(user:) ->
       json.object([
@@ -24,16 +25,16 @@ pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
 
 pub fn socket_message_decoder() -> decode.Decoder(SocketMessage) {
   use variant <- decode.field("type", decode.string)
-  let user_id_decoder = shared_user.user_id_decoder()
+
   case variant {
     "new_message" -> {
-      use sender <- decode.field("sender", user_id_decoder)
-      decode.success(NewMessage(sender:))
+      use message <- decode.field("message", shared_chat.chat_message_decoder())
+      decode.success(NewMessage(message:))
     }
     "is_typing" -> {
-      use user <- decode.field("user", user_id_decoder)
+      use user <- decode.field("user", shared_user.user_id_decoder())
       decode.success(IsTyping(user:))
     }
-    _ -> decode.failure(NewMessage(UserId("")), "SocketMessage")
+    _ -> decode.failure(IsTyping(UserId("")), "SocketMessage")
   }
 }

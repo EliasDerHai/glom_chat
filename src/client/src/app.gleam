@@ -12,7 +12,6 @@ import app_types.{
 import endpoints
 import gleam/dict
 import gleam/dynamic/decode
-import gleam/int
 import gleam/io
 import gleam/json
 import gleam/list
@@ -20,7 +19,6 @@ import gleam/option.{None, Some}
 import gleam/order
 import gleam/result
 import gleam/string
-import gleam/time/calendar
 import gleam/time/timestamp
 import lustre
 import lustre/attribute.{class}
@@ -34,6 +32,7 @@ import rsvp.{type Error}
 import shared_chat.{type ClientChatMessage, ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
+import shared_socket_message.{IsTyping, NewMessage}
 import shared_user.{
   type UserId, type UserMiniDto, type Username, Username, UsersByUsernameDto,
 }
@@ -423,8 +422,55 @@ fn handle_socket_event(
     ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
     ws.OnTextMessage(message) -> {
       io.println("Received WebSocket message: " <> message)
-      // TODO: Parse and handle different message types
-      #(model, effect.none())
+
+      let parsed_message =
+        json.parse(message, shared_socket_message.socket_message_decoder())
+
+      case parsed_message {
+        Error(e) -> {
+          io.println_error(
+            "Failed to read socket_message: " <> string.inspect(e),
+          )
+          #(model, effect.none())
+        }
+        Ok(socket_message) -> {
+          case socket_message {
+            // TODO: show typing indicator
+            IsTyping(_user) -> todo
+
+            NewMessage(message:) -> {
+              let assert LoggedIn(login_state) = model.app_state
+                as "must be logged in at this point"
+
+              case login_state.conversations |> dict.get(message.sender) {
+                // TODO: conversations |> dict.insert(message.sender, todo) <- we could avoid the http if we knew the username
+                Error(_) -> #(model, fetch_conversations())
+                Ok(_) -> {
+                  let conversations =
+                    login_state.conversations
+                    |> dict.upsert(message.sender, fn(existing) {
+                      let assert Some(conversation) = existing
+                        as "already checked"
+                      Conversation(
+                        conversation.messages |> list.append([message]),
+                        conversation.conversation_partner,
+                        conversation.draft_message_text,
+                      )
+                    })
+
+                  #(
+                    Model(
+                      LoggedIn(LoginState(..login_state, conversations:)),
+                      model.global_state,
+                    ),
+                    effect.none(),
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
     }
     ws.OnClose(close_reason) -> {
       io.println("WebSocket closed: " <> string.inspect(close_reason))
@@ -777,7 +823,7 @@ fn view_chat_message(
 
 fn latest_message_time(messages: List(ClientChatMessage)) -> timestamp.Timestamp {
   messages
-  |> list.first
+  |> list.last
   |> result.map(fn(msg) {
     option.unwrap(msg.sent_time, timestamp.from_unix_seconds(0))
   })
