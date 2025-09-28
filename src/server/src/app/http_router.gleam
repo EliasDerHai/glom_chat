@@ -80,6 +80,9 @@ fn handle_api_routes(
         Error(e) -> e
       }
     }
+    ["email", "confirm", user_id, confirmation_hash] -> {
+      user.confirm_email(req, db, user_id, confirmation_hash)
+    }
 
     _ -> validate_and_handle_api_requests(req, db, registry, sub_paths)
   }

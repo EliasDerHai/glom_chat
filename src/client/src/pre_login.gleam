@@ -270,7 +270,7 @@ pub fn update(
         Error(e) -> {
           let error_message = case e {
             rsvp.HttpError(r) if r.status == 401 ->
-              "Login failed:\nWrong username/password"
+              "Login failed:\nWrong credentials or email not yet verified"
             _ -> "Login failed:\nUnexpected Error"
           }
           let toast_msg = toast.create_error_toast(error_message)

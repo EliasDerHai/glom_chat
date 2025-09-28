@@ -1,7 +1,9 @@
 import dot_env
 import dot_env/env
+import gleam/bool
 import gleam/int
 import gleam/io
+import gleam/list
 import gleam/string
 import wisp
 
@@ -42,8 +44,18 @@ pub fn get_server_port() -> Int {
   get_int_or("SERVER_PORT", 8000)
 }
 
+pub fn is_prod() {
+  ["localhost", "127.0.0.1"] |> list.contains(get_server_host()) |> bool.negate
+}
+
 pub fn get_server_base_url() -> String {
-  get_server_host() <> get_server_port() |> int.to_string
+  case is_prod() {
+    True -> "https://"
+    False -> "http://"
+  }
+  <> get_server_host()
+  <> ":"
+  <> get_server_port() |> int.to_string
 }
 
 pub type SenderEmailInfos {

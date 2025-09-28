@@ -3,10 +3,7 @@ import gcourier/message
 import gcourier/smtp
 import gleam/option.{Some}
 
-pub fn send_confirmation_mail(
-  recipient_email: String,
-  email_unlock_hash: String,
-) {
+pub fn send_confirmation_mail(recipient_email: String, confirmation_url: String) {
   let environment.SenderEmailInfos(
     sender_email,
     sender_email_name,
@@ -48,14 +45,14 @@ pub fn send_confirmation_mail(
                         please confirm your email address by clicking the button below.
                     </p>
                     <div style='text-align: center;'>
-                        <a href='" <> environment.get_server_base_url() <> "/" <> email_unlock_hash <> "' class='cta-button'>Confirm Account</a>
+                        <a href='" <> confirmation_url <> "' class='cta-button'>Confirm Account</a>
                     </div>
                     <div class='security-note'>
                         <p><strong>Security Notice:</strong> This confirmation link will expire for your security. If you did not create an account with us, please disregard this email.</p>
                     </div>
                     <p style='margin-top: 30px; color: #666; font-size: 14px;'>
                         If the button above does not work, please copy and paste the following link into your browser:<br>
-                        <a href='" <> environment.get_server_base_url() <> "/" <> email_unlock_hash <> "' style='color: #667eea; word-break: break-all;'>" <> environment.get_server_base_url() <> "/" <> email_unlock_hash <> "</a>
+                        <a href='" <> confirmation_url <> "' style='color: #667eea; word-break: break-all;'>" <> confirmation_url <> "</a>
                     </p>
                 </div>
                 <div class='footer'>

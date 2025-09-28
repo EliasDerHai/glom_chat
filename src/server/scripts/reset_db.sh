@@ -16,13 +16,18 @@ fi
 
 export DATABASE_URL="postgres://postgres:postgres@${HOST_IP}:5432/glom_chat"
 
-echo " Dropping database 'glom_chat'..."
-psql -h "${HOST_IP}" -U postgres -c "DROP DATABASE IF EXISTS glom_chat;"
+echo "Dropping database 'glom_chat'..."
+psql -h "${HOST_IP}" -U postgres -q -c "DROP DATABASE IF EXISTS glom_chat;"
 
 echo "Creating database 'glom_chat'..."
-psql -h "${HOST_IP}" -U postgres -c "CREATE DATABASE glom_chat;"
+psql -h "${HOST_IP}" -U postgres -q -c "CREATE DATABASE glom_chat;"
 
-echo "Running migrations..."
+echo "Setting timezone to 'utc'"
+psql -h "${HOST_IP}" -U postgres -q -c "ALTER DATABASE glom_chat SET TIME ZONE 'UTC';" 
+
+echo """
+Running migrations:
+"""
 gleam run -m cigogne last
 
 echo "Database reset complete!"

@@ -1,5 +1,7 @@
+import app/environment
 import app/persist/pool.{type DbPool}
 import app/persist/sql
+import app/util/mailing
 import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get}
@@ -8,6 +10,7 @@ import gleam/json
 import gleam/list
 import gleam/result
 import gleam/set.{type Set}
+import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp
 import pog
@@ -125,7 +128,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
   use json <- wisp.require_json(req)
 
   let result = {
-    let user_id = uuid.v7()
+    let user_id = uuid.v7() |> UserId
 
     // not uuid.v7() bc pseudo rand num could be close or match user_id
     // it's probably unnecessary but otherwise malicious actors might 
@@ -137,7 +140,6 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> timestamp.to_unix_seconds_and_nanoseconds
       |> tuple.map(fn(s, ms) { s * 1000 + ms })
       |> uuid.v7_from_millisec()
-      |> uuid.to_string
 
     let conn = db |> pool.conn
 
@@ -146,6 +148,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> result.map_error(fn(_) { MalformedPayload }),
     )
 
+    // unique checks
     use _ <- result.try(case sql.select_user_by_username(conn, dto.username.v) {
       Ok(r) if r.count >= 1 -> Error(UsernameTaken)
       _ -> Ok(Nil)
@@ -156,12 +159,11 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       _ -> Ok(Nil)
     })
 
-    // TODO: add email confirm flow
-
+    // credential check
     use _ <- result.try(
-      conn
-      |> sql.insert_user(
-        user_id,
+      sql.insert_user(
+        conn,
+        user_id.v,
         dto.username.v,
         dto.email,
         False,
@@ -178,9 +180,45 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> result.flatten,
     )
 
-    Ok(UserEntity(user_id |> UserId, dto.username, dto.email, False))
+    case environment.is_prod() {
+      // send mail for email confirmation
+      True -> {
+        mailing.send_confirmation_mail(
+          dto.email,
+          // server_url:8080/api/email/confirm/user_id/email_confirmation_hash
+          [
+            environment.get_server_base_url(),
+            "api",
+            "email",
+            "confirm",
+            user_id.v |> uuid.to_string,
+            email_confirmation_hash |> uuid.to_string,
+          ]
+            |> string.join("/")
+            // TODO: remove
+            |> echo,
+        )
+
+        Ok(UserEntity(user_id, dto.username, dto.email, False))
+      }
+
+      // skip mail confirmation and update db immediately
+      False -> {
+        case
+          sql.update_user_email_verified(
+            db |> pool.conn,
+            user_id.v,
+            email_confirmation_hash,
+          )
+        {
+          Error(_) -> Error(ServerError)
+          Ok(_) -> Ok(UserEntity(user_id, dto.username, dto.email, False))
+        }
+      }
+    }
   }
 
+  // response
   case result {
     Ok(entity) ->
       entity
@@ -213,6 +251,41 @@ pub fn user(req: Request, db: DbPool, user_id: String) -> Response {
       _ ->
         wisp.method_not_allowed([Get, Delete])
         |> Error
+    }
+  }
+  |> result_extension.unwrap_both
+}
+
+/// `/email/:id/:hash` endpoint
+pub fn confirm_email(
+  req: Request,
+  db: DbPool,
+  user_id: String,
+  hash: String,
+) -> Response {
+  use <- wisp.require_method(req, http.Get)
+  {
+    use user_id <- result.try(
+      user_id
+      |> uuid.from_string
+      |> result.map_error(fn(_) { wisp.bad_request("not a uuid") })
+      |> result.map(fn(v) { v |> UserId }),
+    )
+
+    use hash <- result.try(
+      hash
+      |> uuid.from_string
+      |> result.map_error(fn(_) { wisp.bad_request("not a uuid") }),
+    )
+
+    use res <- result.try(
+      sql.update_user_email_verified(db |> pool.conn, user_id.v, hash)
+      |> query_result.map_query_result,
+    )
+
+    case res.count == 1 {
+      False -> Error(wisp.response(401))
+      True -> wisp.ok() |> Ok
     }
   }
   |> result_extension.unwrap_both

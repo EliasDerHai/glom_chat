@@ -135,7 +135,7 @@ pub fn insert_user(
   arg_3: String,
   arg_4: Bool,
   arg_5: String,
-  arg_6: String,
+  arg_6: Uuid,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
@@ -148,7 +148,7 @@ VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)), $6);
   |> pog.parameter(pog.text(arg_3))
   |> pog.parameter(pog.bool(arg_4))
   |> pog.parameter(pog.text(arg_5))
-  |> pog.parameter(pog.text(arg_6))
+  |> pog.parameter(pog.text(uuid.to_string(arg_6)))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -394,7 +394,8 @@ pub fn select_user_by_credentials(
   "SELECT id
 FROM users
 WHERE username = $1
-  AND password_hash = crypt($2, password_hash);
+  AND password_hash = crypt($2, password_hash)
+  AND email_verified = TRUE;
 "
   |> pog.query
   |> pog.parameter(pog.text(arg_1))
@@ -552,6 +553,33 @@ LIMIT $2;
   |> pog.query
   |> pog.parameter(pog.text(arg_1))
   |> pog.parameter(pog.int(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `update_user_email_verified` query
+/// defined in `./src/app/persist/sql/update_user_email_verified.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn update_user_email_verified(
+  db: pog.Connection,
+  arg_1: Uuid,
+  arg_2: Uuid,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE users
+SET email_verified = TRUE
+WHERE id = $1
+	AND email_confirmation_hash = $2
+	AND email_verified = FALSE
+	AND created_at + INTERVAL '1 day' < now() AT TIME ZONE 'UTC';
+"
+  |> pog.query
+  |> pog.parameter(pog.text(uuid.to_string(arg_1)))
+  |> pog.parameter(pog.text(uuid.to_string(arg_2)))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
