@@ -2,6 +2,8 @@
 FROM erlang:27.1.1.0-alpine AS build
 COPY --from=ghcr.io/gleam-lang/gleam:v1.12.0-erlang-alpine /bin/gleam /bin/gleam
 
+# needed to pull forks directly from github
+RUN apk add --no-cache git
 WORKDIR /build
 COPY src/shared /build/shared
 COPY src/server /build/server
