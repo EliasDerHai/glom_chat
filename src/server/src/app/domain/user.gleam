@@ -9,6 +9,7 @@ import gleam/result
 import gleam/set.{type Set}
 import pog
 import shared_user.{type UserMiniDto, type Username, Username}
+import util/result_extension
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -84,7 +85,7 @@ pub fn list_users(req: Request, db: DbPool) -> Response {
     decode.run(json, shared_user.decode_users_by_username_dto())
     |> result.map(fn(dto) { dto.username })
     |> result.map_error(fn(_) { "" |> Username })
-    |> result.unwrap_both()
+    |> result_extension.unwrap_both()
 
   let map_rows = fn(r: pog.Returned(sql.SelectUsersByUsernameRow)) {
     list.map(r.rows, from_select_users_row)
@@ -104,7 +105,7 @@ pub fn list_users(req: Request, db: DbPool) -> Response {
   |> sql.select_users_by_username(search_username.v, 50)
   |> query_result.map_query_result
   |> result.map(map_rows)
-  |> result.unwrap_both
+  |> result_extension.unwrap_both
 }
 
 type CreateUserErrorReason {
@@ -187,7 +188,7 @@ pub fn user(req: Request, db: DbPool, user_id: String) -> Response {
         |> Error
     }
   }
-  |> result.unwrap_both
+  |> result_extension.unwrap_both
 }
 
 pub fn select_user(db: DbPool, id: UserId) -> Result(UserEntity, Response) {

@@ -7,6 +7,7 @@ import gleam/io
 import gleam/order
 import gleam/result
 import gleam/time/timestamp
+import util/result_extension
 import wisp
 
 pub fn default_middleware(
@@ -55,7 +56,7 @@ pub fn validation_middleware(
             Get -> handle_request(req, session_entity)
             _ ->
               validate_csrf_and_handle(req, session_entity, handle_request)
-              |> result.unwrap_both
+              |> result_extension.unwrap_both
           }
         }
       }

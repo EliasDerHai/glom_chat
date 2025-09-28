@@ -18,6 +18,7 @@ import gleam/time/timestamp
 import pog
 import shared_session.{type SessionDto, SessionDto}
 import shared_user.{type Username}
+import util/result_extension
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -214,7 +215,7 @@ pub fn logout(req: Request, db: DbPool) -> Response {
     |> glom_cookie.set_cookie("csrf_token", "", 0, False, None)
     |> Ok
   }
-  |> result.unwrap_both
+  |> result_extension.unwrap_both
 }
 
 fn verify_user_credentials_and_create_session(

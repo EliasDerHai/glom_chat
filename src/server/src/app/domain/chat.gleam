@@ -20,6 +20,7 @@ import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import shared_chat_conversation
 import shared_socket_message
+import util/result_extension
 import wisp.{type Request, type Response}
 import youid/uuid
 
@@ -156,7 +157,7 @@ pub fn chat_conversations(
     |> wisp.json_response(200)
     |> Ok
   }
-  |> result.unwrap_both()
+  |> result_extension.unwrap_both()
 }
 
 pub fn post_chat_message(
@@ -207,5 +208,5 @@ pub fn post_chat_message(
     |> wisp.json_response(201)
     |> Ok
   }
-  |> result.unwrap_both()
+  |> result_extension.unwrap_both()
 }
