@@ -3,13 +3,17 @@ import app/persist/sql
 import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get}
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/result
 import gleam/set.{type Set}
+import gleam/time/duration
+import gleam/time/timestamp
 import pog
 import shared_user.{type UserMiniDto, type Username, Username}
 import util/result_extension
+import util/tuple
 import wisp.{type Request, type Response}
 import youid/uuid.{type Uuid}
 
@@ -122,6 +126,19 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
   let result = {
     let user_id = uuid.v7()
+
+    // not uuid.v7() bc pseudo rand num could be close or match user_id
+    // it's probably unnecessary but otherwise malicious actors might 
+    // be able to confirm the user's email without actually receiving 
+    // the mail
+    let email_confirmation_hash =
+      timestamp.system_time()
+      |> timestamp.add(duration.milliseconds(-1 * int.random(10_000)))
+      |> timestamp.to_unix_seconds_and_nanoseconds
+      |> tuple.map(fn(s, ms) { s * 1000 + ms })
+      |> uuid.v7_from_millisec()
+      |> uuid.to_string
+
     let conn = db |> pool.conn
 
     use dto <- result.try(
@@ -139,6 +156,8 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       _ -> Ok(Nil)
     })
 
+    // TODO: add email confirm flow
+
     use _ <- result.try(
       conn
       |> sql.insert_user(
@@ -147,8 +166,16 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
         dto.email,
         False,
         dto.password,
+        email_confirmation_hash,
       )
-      |> result.map_error(fn(_) { ServerError }),
+      |> result.map(fn(res) {
+        case res.count != 1 {
+          False -> Error(ServerError)
+          True -> Ok(Nil)
+        }
+      })
+      |> result.map_error(fn(_) { ServerError })
+      |> result.flatten,
     )
 
     Ok(UserEntity(user_id |> UserId, dto.username, dto.email, False))

@@ -135,11 +135,12 @@ pub fn insert_user(
   arg_3: String,
   arg_4: Bool,
   arg_5: String,
+  arg_6: String,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
-  "INSERT INTO users (id, username, email, email_verified, password_hash)
-VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
+  "INSERT INTO users (id, username, email, email_verified, password_hash, email_confirmation_hash)
+VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)), $6);
 "
   |> pog.query
   |> pog.parameter(pog.text(uuid.to_string(arg_1)))
@@ -147,6 +148,7 @@ VALUES ($1, $2, $3, $4, crypt($5, gen_salt('bf', 12)));
   |> pog.parameter(pog.text(arg_3))
   |> pog.parameter(pog.bool(arg_4))
   |> pog.parameter(pog.text(arg_5))
+  |> pog.parameter(pog.text(arg_6))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }

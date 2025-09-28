@@ -42,6 +42,24 @@ pub fn get_server_port() -> Int {
   get_int_or("SERVER_PORT", 8000)
 }
 
+pub fn get_server_base_url() -> String {
+  get_server_host() <> get_server_port() |> int.to_string
+}
+
+pub type SenderEmailInfos {
+  SenderEmailInfos(email_address: String, name: String, app_key: String)
+}
+
+pub fn get_sender_email_infos() -> SenderEmailInfos {
+  SenderEmailInfos(
+    get_string_or("EMAIL", ""),
+    get_string_or("EMAIL_NAME", ""),
+    get_string_or("EMAIL_APP_KEY", ""),
+  )
+}
+
+// utils --------------------------------------------------
+
 fn get_string_or(key: String, fallback: String) -> String {
   let key = key |> string.uppercase
   case env.get_string(key) {
