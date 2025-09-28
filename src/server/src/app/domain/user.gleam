@@ -6,6 +6,7 @@ import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get}
 import gleam/int
+import gleam/io
 import gleam/json
 import gleam/list
 import gleam/result
@@ -161,6 +162,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
     // credential check
     use _ <- result.try(
+      // FIXME: revert/rollback if email sending fails
       sql.insert_user(
         conn,
         user_id.v,
@@ -180,6 +182,9 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
       |> result.flatten,
     )
 
+    echo "echo??"
+    io.println("io.println??")
+
     case environment.is_prod() {
       // send mail for email confirmation
       True -> {
@@ -196,7 +201,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
           ]
             |> string.join("/")
             // TODO: remove
-            |> echo,
+            |> echo as "send_url",
         )
 
         Ok(UserEntity(user_id, dto.username, dto.email, False))

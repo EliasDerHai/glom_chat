@@ -45,7 +45,11 @@ pub fn get_server_port() -> Int {
 }
 
 pub fn is_prod() {
-  ["localhost", "127.0.0.1"] |> list.contains(get_server_host()) |> bool.negate
+  echo get_server_host()
+  ["localhost", "127.0.0.1"]
+  |> list.contains(get_server_host())
+  |> bool.negate
+  |> echo
 }
 
 pub fn get_server_base_url() -> String {
