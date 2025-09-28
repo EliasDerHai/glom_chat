@@ -29,7 +29,7 @@ dot_env = ">= 1.2.0 and < 2.0.0"
 shared = { path = "../shared" }
 glisten = ">= 8.0.1 and < 9.0.0"
 # TODO: update once 1.3 is released
-gcourier = { git = "git@github.com:EliasDerHai/gcourier.git", ref = "main" }
+gcourier = { git = "https://github.com/EliasDerHai/gcourier.git", ref = "main" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
