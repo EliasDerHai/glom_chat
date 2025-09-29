@@ -1,4 +1,5 @@
 import gleam/result
+import gleam/string
 import pog.{type QueryError}
 import wisp.{type Response}
 
@@ -7,7 +8,29 @@ pub fn map_query_result(r: Result(ok, QueryError)) -> Result(ok, Response) {
 }
 
 fn map_err(query_error: QueryError) {
-  echo query_error
+  wisp.log_info("query_error: " <> query_error |> string.inspect)
   wisp.internal_server_error()
   |> wisp.string_body("db-query failed")
+}
+
+pub fn map_query_result_expect_single_row(
+  r: Result(pog.Returned(a), QueryError),
+) -> Result(pog.Returned(a), Response) {
+  r
+  |> map_query_result
+  |> result.map(fn(ok) {
+    case ok.count {
+      1 -> Ok(ok)
+      _ -> {
+        wisp.log_info("query_error: expected exactly one row")
+        Error(
+          wisp.not_found()
+          |> wisp.string_body(
+            "db-query failed - expected exactly one row (affected or selected)",
+          ),
+        )
+      }
+    }
+  })
+  |> result.flatten
 }

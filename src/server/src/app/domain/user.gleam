@@ -172,25 +172,15 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
         dto.password,
         email_confirmation_hash,
       )
-      |> result.map(fn(res) {
-        case res.count != 1 {
-          False -> Error(ServerError)
-          True -> Ok(Nil)
-        }
-      })
-      |> result.map_error(fn(_) { ServerError })
-      |> result.flatten,
+      |> query_result.map_query_result_expect_single_row()
+      |> result.map_error(fn(_) { ServerError }),
     )
 
-    echo "echo??"
-    io.println("io.println??")
-
-    case environment.is_prod() {
+    use _ <- result.try(case environment.is_prod() {
       // send mail for email confirmation
       True -> {
-        mailing.send_confirmation_mail(
-          dto.email,
-          // server_url:8080/api/email/confirm/user_id/email_confirmation_hash
+        // server_url:8080/api/email/confirm/user_id/email_confirmation_hash
+        let confirm_url =
           [
             environment.get_server_base_url(),
             "api",
@@ -199,28 +189,33 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
             user_id.v |> uuid.to_string,
             email_confirmation_hash |> uuid.to_string,
           ]
-            |> string.join("/")
-            // TODO: remove
-            |> echo as "send_url",
+          |> string.join("/")
+
+        wisp.log_info(
+          "sending mail to '" <> dto.email <> "' with '" <> confirm_url <> "'",
         )
 
-        Ok(UserEntity(user_id, dto.username, dto.email, False))
+        mailing.send_confirmation_mail(dto.email, confirm_url)
+
+        Ok(Nil)
       }
 
       // skip mail confirmation and update db immediately
       False -> {
-        case
-          sql.update_user_email_verified(
-            db |> pool.conn,
-            user_id.v,
-            email_confirmation_hash,
-          )
-        {
-          Error(_) -> Error(ServerError)
-          Ok(_) -> Ok(UserEntity(user_id, dto.username, dto.email, False))
-        }
+        wisp.log_info("skip sending mail to '" <> dto.email <> "' (dev-env)")
+
+        sql.update_user_email_verified(
+          db |> pool.conn,
+          user_id.v,
+          email_confirmation_hash,
+        )
+        |> query_result.map_query_result_expect_single_row()
+        |> result.map_error(fn(_) { ServerError })
+        |> result.map(fn(_) { Nil })
       }
-    }
+    })
+
+    Ok(UserEntity(user_id, dto.username, dto.email, False))
   }
 
   // response
