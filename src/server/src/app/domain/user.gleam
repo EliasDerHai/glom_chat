@@ -161,7 +161,7 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
 
     // credential check
     use _ <- result.try(
-      // FIXME: revert/rollback if email sending fails
+      // FIXME: revert/rollback if email sending fails (transactional outboxing)
       sql.insert_user(
         conn,
         user_id.v,
@@ -178,10 +178,10 @@ pub fn create_user(req: Request, db: DbPool) -> Response {
     use _ <- result.try(case environment.is_prod() {
       // send mail for email confirmation
       True -> {
-        // server_url:8080/api/email/confirm/user_id/email_confirmation_hash
+        // server_url:8000/api/email/confirm/user_id/email_confirmation_hash
         let confirm_url =
           [
-            environment.get_server_base_url(),
+            environment.get_public_url(),
             "api",
             "email",
             "confirm",

@@ -7,6 +7,7 @@ pub type ChatConversationDto {
   ChatConversationDto(
     messages: List(ClientChatMessage),
     self: UserId,
+    // not UserMiniDto(UserId) to already pave the way for group-chats
     others: List(UserMiniDto(UserId)),
   )
 }

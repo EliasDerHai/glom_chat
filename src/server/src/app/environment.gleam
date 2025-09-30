@@ -50,14 +50,8 @@ pub fn is_prod() {
   |> bool.negate
 }
 
-pub fn get_server_base_url() -> String {
-  case is_prod() {
-    True -> "https://"
-    False -> "http://"
-  }
-  <> get_server_host()
-  <> ":"
-  <> get_server_port() |> int.to_string
+pub fn get_public_url() -> String {
+  get_string_or("PUBLIC_URL", "http://localhost:8000")
 }
 
 pub type SenderEmailInfos {
