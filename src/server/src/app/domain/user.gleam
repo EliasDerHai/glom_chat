@@ -6,7 +6,6 @@ import app/util/query_result
 import gleam/dynamic/decode
 import gleam/http.{Delete, Get}
 import gleam/int
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/result

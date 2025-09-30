@@ -47,7 +47,7 @@ pub fn send_confirmation_mail(recipient_email: String, confirmation_url: String)
                         please confirm your email address by clicking the button below.
                     </p>
                     <div style='text-align: center;'>
-                        <a href='" <> confirmation_url <> "' class='cta-button'>Confirm Account</a>
+                        <a href='" <> confirmation_url <> "' style='color: white' class='cta-button'>Confirm Account</a>
                     </div>
                     <div class='security-note'>
                         <p><strong>Security Notice:</strong> This confirmation link will expire for your security. If you did not create an account with us, please disregard this email.</p>
