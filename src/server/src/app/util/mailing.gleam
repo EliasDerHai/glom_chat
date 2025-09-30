@@ -2,6 +2,8 @@ import app/environment
 import gcourier/message
 import gcourier/smtp
 import gleam/option.{Some}
+import gleam/string
+import wisp
 
 pub fn send_confirmation_mail(recipient_email: String, confirmation_url: String) {
   let environment.SenderEmailInfos(
@@ -69,6 +71,9 @@ pub fn send_confirmation_mail(recipient_email: String, confirmation_url: String)
     |> message.add_recipient(recipient_email, message.To)
     |> message.set_subject(subject)
     |> message.set_html(body)
+
+  wisp.log_info(string.inspect(msg))
+  wisp.log_info(string.inspect(#(sender_email, sender_password)))
 
   smtp.send("smtp.gmail.com", 587, Some(#(sender_email, sender_password)), msg)
 }
