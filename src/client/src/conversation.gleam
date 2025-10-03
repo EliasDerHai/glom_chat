@@ -1,7 +1,7 @@
 import app_types.{type Conversation}
 import gleam/dict
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/order
 import gleam/result
 import gleam/string
@@ -33,15 +33,26 @@ pub fn sort_conversations(
 
 fn latest_message_time(messages: List(ClientChatMessage)) -> Timestamp {
   messages
+  |> sort_messages
+  |> list.last
+  |> result.map(fn(msg) { msg.sent_time |> unwrap_time_option })
+  |> unwrap_time_result
+}
+
+pub fn sort_messages(messages: List(ClientChatMessage)) {
+  messages
   |> list.sort(fn(left, right) {
     timestamp.compare(
-      left.sent_time |> option.unwrap(timestamp.from_unix_seconds(0)),
-      right.sent_time |> option.unwrap(timestamp.from_unix_seconds(0)),
+      left.sent_time |> unwrap_time_option,
+      right.sent_time |> unwrap_time_option,
     )
   })
-  |> list.last
-  |> result.map(fn(msg) {
-    option.unwrap(msg.sent_time, timestamp.from_unix_seconds(0))
-  })
-  |> result.unwrap(timestamp.from_unix_seconds(0))
+}
+
+fn unwrap_time_option(time: Option(Timestamp)) -> Timestamp {
+  time |> option.unwrap(timestamp.from_unix_seconds(0))
+}
+
+fn unwrap_time_result(time: Result(Timestamp, _)) -> Timestamp {
+  time |> result.unwrap(timestamp.from_unix_seconds(0))
 }

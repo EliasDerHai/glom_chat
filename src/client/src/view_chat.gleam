@@ -10,7 +10,6 @@ import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import gleam/time/timestamp
 import lustre/attribute.{class}
 import lustre/element.{type Element}
 import lustre/element/html
@@ -185,16 +184,7 @@ fn view_chat_messages(
             ]
             _ ->
               messages
-              |> list.sort(fn(a, b) {
-                let time_or_utc_zero = fn(option_time) {
-                  option_time |> option.unwrap(timestamp.from_unix_seconds(0))
-                }
-
-                timestamp.compare(
-                  a.sent_time |> time_or_utc_zero,
-                  b.sent_time |> time_or_utc_zero,
-                )
-              })
+              |> conversation.sort_messages
               |> list.map(fn(message) {
                 view_chat_message(message, self, dto.username)
               })
