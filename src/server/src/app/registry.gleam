@@ -11,13 +11,23 @@ pub type SocketRegistry =
   Subject(RegistryMessage)
 
 pub type RegistryMessage {
-  Register(user_id: UserId, handle: Subject(SocketMessage))
+  // adds socket to 'state' - client connect
+  Register(user_id: UserId, handle: Subject(ServerSideSocketOp))
+  // removes socket from 'state' - for client side close
   Unregister(user_id: UserId)
+  // closes the socket which in turn removes entry from 'state' - for server side close (on logout)
+  ServerUnregister(user_id: UserId)
+  // sends message via socket
   SendMessage(user_id: UserId, message: SocketMessage)
 }
 
+pub type ServerSideSocketOp {
+  Send(SocketMessage)
+  ServerInitiatedClose
+}
+
 type State =
-  Dict(UserId, Subject(SocketMessage))
+  Dict(UserId, Subject(ServerSideSocketOp))
 
 pub fn init() -> SocketRegistry {
   let assert Ok(started) =
@@ -44,7 +54,17 @@ fn handle_message(
       let _ =
         state
         |> dict.get(user_id)
-        |> result.map(fn(subject) { subject |> process.send(message) })
+        |> result.map(fn(subject) { process.send(subject, message |> Send) })
+
+      state
+    }
+    ServerUnregister(user_id:) -> {
+      let _ =
+        state
+        |> dict.get(user_id)
+        |> result.map(fn(subject) {
+          process.send(subject, ServerInitiatedClose)
+        })
 
       state
     }

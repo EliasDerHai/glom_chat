@@ -97,7 +97,7 @@ fn validate_and_handle_api_requests(
 ) -> response.Response(wisp.Body) {
   use req, session <- middleware.validation_middleware(req, db)
   case sub_paths {
-    ["auth", "logout"] -> session.logout(req, db)
+    ["auth", "logout"] -> session.logout(req, db, session, registry)
     ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
     ["chats", "conversations"] -> chat.chat_conversations(req, db, session)

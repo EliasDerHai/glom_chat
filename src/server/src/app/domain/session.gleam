@@ -1,6 +1,7 @@
 import app/domain/user.{type UserId, UserId}
 import app/persist/pool.{type DbPool}
 import app/persist/sql
+import app/registry.{type SocketRegistry}
 import app/util/cookie as glom_cookie
 import app/util/query_result
 import gleam/bit_array
@@ -12,6 +13,7 @@ import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None}
+import gleam/otp/actor
 import gleam/result
 import gleam/time/duration
 import gleam/time/timestamp
@@ -189,26 +191,21 @@ pub fn login(
   }
 }
 
-pub fn logout(req: Request, db: DbPool) -> Response {
+pub fn logout(
+  req: Request,
+  db: DbPool,
+  session: SessionEntity,
+  reg: SocketRegistry,
+) -> Response {
   use <- wisp.require_method(req, Post)
 
   {
-    use session_id <- result.try(
-      wisp.get_cookie(req, "session_id", wisp.Signed)
-      |> result.map_error(fn(_) {
-        wisp.bad_request("no cookie with name 'session_id'")
-      }),
-    )
-
-    use session_id <- result.try(
-      uuid.from_string(session_id)
-      |> result.map_error(fn(_) { wisp.bad_request("session_id is not valid") }),
-    )
-
     use _ <- result.try(
-      delete_session(db, session_id)
+      delete_session(db, session.id)
       |> query_result.map_query_result(),
     )
+
+    actor.send(reg, registry.ServerUnregister(session.user_id))
 
     wisp.ok()
     |> glom_cookie.set_cookie("session_id", "", 0, True, None)

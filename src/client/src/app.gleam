@@ -84,18 +84,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 
   let logout = fn(result: Result(Nil, Error)) -> #(Model, Effect(Msg)) {
-    let login_model = Model(PreLogin, model.global_state)
-
     case result {
       Ok(_) ->
         case model.app_state {
-          LoggedIn(LoginState(_, Established(_sock), ..)) -> #(
-            login_model,
-            effect.none(),
-            // FIXME: ws close causes runtime error
-          // ws.close(sock),
-          )
-          LoggedIn(_) -> #(login_model, effect.none())
+          // socket automatically closed on server side as part of logout
+          LoggedIn(_) -> #(Model(PreLogin, model.global_state), effect.none())
           PreLogin -> noop
         }
 

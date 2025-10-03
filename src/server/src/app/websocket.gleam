@@ -12,11 +12,12 @@ import gleam/option
 import gleam/otp/actor
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
-import shared_socket_message.{type SocketMessage}
+import shared_socket_message
 import wisp
+import youid/uuid
 
 pub type WsState {
-  WsState(user_id: UserId, outbox: Subject(SocketMessage))
+  WsState(user_id: UserId, outbox: Subject(registry.ServerSideSocketOp))
 }
 
 pub fn handle_ws_request(
@@ -42,7 +43,7 @@ pub fn handle_ws_request(
           as "could not extract session from ws-handshake"
 
         // Allow sending out messages 
-        let handle: Subject(SocketMessage) = process.new_subject()
+        let handle: Subject(registry.ServerSideSocketOp) = process.new_subject()
         actor.send(registry, Register(session.user_id, handle))
 
         // Store the user_id in this connection's state
@@ -66,7 +67,7 @@ pub fn handle_ws_request(
 
 fn handle_ws_message(
   state: WsState,
-  message: WebsocketMessage(SocketMessage),
+  message: WebsocketMessage(registry.ServerSideSocketOp),
   conn: WebsocketConnection,
   db: DbPool,
 ) -> Next(WsState, conn) {
@@ -77,23 +78,33 @@ fn handle_ws_message(
     }
     mist.Binary(_) -> mist.continue(state)
     mist.Closed | mist.Shutdown -> mist.stop()
-    mist.Custom(message) -> {
-      let body =
-        message
-        |> shared_socket_message.socket_message_to_json
-        |> json.to_string
+    mist.Custom(op) ->
+      case op {
+        registry.Send(message) -> {
+          let body =
+            message
+            |> shared_socket_message.socket_message_to_json
+            |> json.to_string
 
-      let r = conn |> mist.send_text_frame(body)
+          let r = conn |> mist.send_text_frame(body)
 
-      case r {
-        Error(e) ->
-          io.print_error(
-            "sending socket_message failed: " <> e |> string.inspect,
+          case r {
+            Error(e) ->
+              wisp.log_warning(
+                "sending socket_message failed: " <> e |> string.inspect,
+              )
+            _ -> Nil
+          }
+          mist.continue(state)
+        }
+
+        registry.ServerInitiatedClose -> {
+          wisp.log_info(
+            "Server closing socket for user " <> uuid.to_string(state.user_id.v),
           )
-        _ -> Nil
+          mist.stop()
+        }
       }
-      mist.continue(state)
-    }
   }
 }
 
