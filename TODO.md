@@ -1,45 +1,39 @@
 # TODO - Glom Chat Development
 
-## Backend
-
-Db alternatives 
-- Supabase
-- Prims
+## Code & Impl
 
 ### Core Features
-- [ ] Implement real-time chat messaging
+- [ ] Add message history pagination
+- [ ] Add user online presence indicators
+- [ ] Add typing indicators
+- [ ] Add image posting
 - [ ] Add cache for sessions (no db-trip for every request)
 - [ ] Add chat room/conversation management
-- [ ] Add message history pagination
-- [ ] Implement user presence indicators
-- [ ] Add typing indicators
-- [ ] Implement file upload/sharing
+- [ ] Add more friendlist (currently no "blocked", no "invisible users")
+- [ ] Add voice message (record, send, receive, play)
+
+### UI
+- [ ] Add accessibility improvements (keyboard navigation)
+- [ ] Make Sidebar width draggable
 
 ### Security & Auth
-- [ ] Implement rate limiting
+- [ ] Add rate limiting
 - [ ] Add input validation and sanitization
 
-## Frontend
-
-### Core Features
-- [ ] Complete chat interface implementation
-- [ ] Implement real-time message display
-- [ ] Add user search and conversation creation
-
 ### Production
-- [ ] Add proper favicon and PWA manifest
-- [ ] Add accessibility improvements (ARIA labels, keyboard navigation)
+- [ ] Add PWA manifest
 
 ## Infrastructure
 
+- [ ] Deploy via gcp (burn 300$ free creds till christmas XD)
 - [ ] Eval if Neon suitable for long term pgo ([see discord thread](https://discord.com/channels/768594524158427167/1417525313591574528))
-- [ ] Document Docker development workflow
-- [ ] Create local integration tests
+        - Db alternatives 
+            - Supabase
+            - Prism
+- [ ] Add local integration tests
 - [ ] Add automated tests for API endpoints
-- [ ] Set up database seeding for testing
-- [ ] Create end-to-end testing framework
-- [ ] Set up monitoring and logging
-
+- [ ] Add end-to-end testing framework
+- [ ] Tune monitoring and logging
 
 ## Completed
 
@@ -73,3 +67,7 @@ Db alternatives
 - [x] Create GitHub Actions workflow for frontend deployment
 - [x] **CI/CD Pipeline**
 - [x] Set up automated database migrations
+- [x] Implement real-time chat messaging
+- [x] Implement real-time message display
+- [x] Add user search and conversation creation
+- [x] Add proper favicon

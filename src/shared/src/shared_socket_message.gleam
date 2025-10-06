@@ -6,6 +6,7 @@ import shared_user.{type UserId, UserId}
 pub type SocketMessage {
   NewMessage(message: ClientChatMessage)
   IsTyping(user: UserId)
+  OnlineHasChanged(online: List(UserId))
 }
 
 pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
@@ -19,6 +20,11 @@ pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
       json.object([
         #("type", json.string("is_typing")),
         #("user", user |> shared_user.user_id_to_json()),
+      ])
+    OnlineHasChanged(users) ->
+      json.object([
+        #("type", json.string("online_has_changed")),
+        #("online", users |> json.array(shared_user.user_id_to_json)),
       ])
   }
 }
@@ -34,6 +40,13 @@ pub fn socket_message_decoder() -> decode.Decoder(SocketMessage) {
     "is_typing" -> {
       use user <- decode.field("user", shared_user.user_id_decoder())
       decode.success(IsTyping(user:))
+    }
+    "online_has_changed" -> {
+      use online <- decode.field(
+        "online",
+        shared_user.user_id_decoder() |> decode.list,
+      )
+      decode.success(OnlineHasChanged(online:))
     }
     _ -> decode.failure(IsTyping(UserId("")), "SocketMessage")
   }

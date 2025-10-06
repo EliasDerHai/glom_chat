@@ -9,6 +9,7 @@ import gleam/dict
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/set
 import gleam/string
 import lustre/attribute.{class}
 import lustre/element.{type Element}
@@ -18,12 +19,19 @@ import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/button
 import util/icons
+import util/list_extension
 import util/option_extension
 import util/time_util
 
 pub fn view_chat(model: LoginState) -> Element(Msg) {
-  let LoginState(session, _, new_conv, selected_conversation, conversations) =
-    model
+  let LoginState(
+    session,
+    _,
+    new_conv,
+    selected_conversation,
+    conversations,
+    online,
+  ) = model
 
   let draft_text = case selected_conversation {
     None -> ""
@@ -39,7 +47,9 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
     html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
       // Sidebar Header
       html.div([class("p-4 bUserModalOpenr-b border-gray-200")], [
-        html.h2([class("text-xl font-bold text-blue-600")], [html.text("Chats")]),
+        html.h2([class("text-xl font-bold text-blue-600")], [
+          html.text("Glom-chat"),
+        ]),
       ]),
       // Search Input
       html.div([class("p-4")], [
@@ -81,6 +91,13 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
             ],
             [
               html.text({ key_value.1 }.conversation_partner.v),
+              case online |> set.contains(key_value.0) {
+                False -> " (offline)"
+                True -> " (online)"
+              }
+                |> html.text
+                |> list_extension.of_one
+                |> html.i([], _),
             ],
           )
         })

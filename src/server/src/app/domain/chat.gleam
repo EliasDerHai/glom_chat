@@ -195,7 +195,7 @@ pub fn post_chat_message(
 
     actor.send(
       registry,
-      registry.SendMessage(
+      registry.OnNotifyClient(
         msg.receiver,
         shared_socket_message.NewMessage(msg |> to_shared_message),
       ),

@@ -16,6 +16,7 @@ import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/set
 import gleam/string
 import gleam/time/timestamp
 import lustre
@@ -28,7 +29,7 @@ import rsvp.{type Error}
 import shared_chat.{ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
-import shared_socket_message.{IsTyping, NewMessage}
+import shared_socket_message.{IsTyping, NewMessage, OnlineHasChanged}
 import shared_user.{Username, UsersByUsernameDto}
 import util/toast
 import util/toast_state
@@ -73,6 +74,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           None,
           None,
           dict.new(),
+          set.new(),
         )),
         model.global_state,
       ),
@@ -165,17 +167,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 fn update_draft_message(model: Model, text: String) -> #(Model, Effect(Msg)) {
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
-  let assert LoginState(
-    session: _,
-    web_socket: _,
-    new_conversation: _,
-    selected_conversation: Some(selected_conversation),
-    conversations:,
-  ) = login_state
+  let assert Some(selected_conversation) = login_state.selected_conversation
     as "conversation must be selected at this point"
 
   let conversations =
-    dict.upsert(conversations, selected_conversation.id, fn(curr) {
+    dict.upsert(login_state.conversations, selected_conversation.id, fn(curr) {
       case curr {
         None -> panic as "conversation doesn't exist"
         Some(conversation) ->
@@ -355,6 +351,7 @@ fn send_message(model: Model) -> Effect(Msg) {
     new_conversation: _,
     selected_conversation: Some(selected_conversation),
     conversations:,
+    online: _,
   )) = model.app_state
     as "must be logged in & conversation selected at this point"
 
@@ -463,6 +460,20 @@ fn handle_socket_event(
                   )
                 }
               }
+            }
+
+            OnlineHasChanged(online:) -> {
+              let assert LoggedIn(login_state) = model.app_state
+                as "must be logged in at this point"
+              let online = online |> set.from_list
+
+              #(
+                Model(
+                  LoggedIn(LoginState(..login_state, online:)),
+                  model.global_state,
+                ),
+                effect.none(),
+              )
             }
           }
         }

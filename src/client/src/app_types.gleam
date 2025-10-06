@@ -1,5 +1,6 @@
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
+import gleam/set.{type Set}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp.{type Error}
@@ -37,6 +38,7 @@ pub type LoginState {
     new_conversation: Option(NewConversation),
     selected_conversation: Option(UserMiniDto(UserId)),
     conversations: Dict(UserId, Conversation),
+    online: Set(UserId),
   )
 }
 

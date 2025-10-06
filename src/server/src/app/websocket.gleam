@@ -1,7 +1,9 @@
 import app/domain/session
 import app/domain/user.{type UserId}
 import app/persist/pool.{type DbPool}
-import app/registry.{type SocketRegistry, Register, Unregister}
+import app/registry.{
+  type SocketRegistry, OnClientRegistered, OnClientUnregistered,
+}
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
 import gleam/bit_array
@@ -44,7 +46,7 @@ pub fn handle_ws_request(
 
         // Allow sending out messages 
         let handle: Subject(registry.ServerSideSocketOp) = process.new_subject()
-        actor.send(registry, Register(session.user_id, handle))
+        actor.send(registry, OnClientRegistered(session.user_id, handle))
 
         // Store the user_id in this connection's state
         let state = WsState(session.user_id, handle)
@@ -57,7 +59,7 @@ pub fn handle_ws_request(
       },
       on_close: fn(state) {
         // On close, send a message to unregister this user
-        actor.send(registry, Unregister(state.user_id))
+        actor.send(registry, OnClientUnregistered(state.user_id))
         Nil
       },
       handler: fn(state, msg, conn) { handle_ws_message(state, msg, conn, db) },

@@ -205,7 +205,7 @@ pub fn logout(
       |> query_result.map_query_result(),
     )
 
-    actor.send(reg, registry.ServerUnregister(session.user_id))
+    actor.send(reg, registry.OnServerUnregisteredClient(session.user_id))
 
     wisp.ok()
     |> glom_cookie.set_cookie("session_id", "", 0, True, None)
