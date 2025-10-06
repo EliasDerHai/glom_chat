@@ -19,7 +19,6 @@ import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/button
 import util/icons
-import util/list_extension
 import util/option_extension
 import util/time_util
 
@@ -79,7 +78,13 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
         |> list.map(fn(key_value) {
           html.button(
             [
-              class("p-4 hover:bg-gray-100 cursor-pointer w-full text-left"),
+              class(
+                "p-4 hover:bg-gray-100 cursor-pointer w-full text-left flex justify-start items-center",
+              ),
+              attribute.title(case online |> set.contains(key_value.0) {
+                False -> "offline"
+                True -> "online"
+              }),
               event.on_click(
                 NewConversationMsg(
                   UserConversationPartnerSelect(shared_user.UserMiniDto(
@@ -91,13 +96,18 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
             ],
             [
               html.text({ key_value.1 }.conversation_partner.v),
-              case online |> set.contains(key_value.0) {
-                False -> " (offline)"
-                True -> " (online)"
-              }
-                |> html.text
-                |> list_extension.of_one
-                |> html.i([], _),
+              html.div(
+                [
+                  class(
+                    "size-2 rounded-full ml-1 "
+                    <> case online |> set.contains(key_value.0) {
+                      False -> "bg-gray-400"
+                      True -> "bg-green-500"
+                    },
+                  ),
+                ],
+                [],
+              ),
             ],
           )
         })
