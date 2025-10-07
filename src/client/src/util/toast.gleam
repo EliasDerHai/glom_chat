@@ -11,6 +11,7 @@ import util/time_util
 // TYPES -----------------------------------------------------------------------
 
 pub type Toast {
+  // id == utc.millis of toast creation
   Toast(id: Int, content: String, toast_style: ToastStyle, duration: Duration)
 }
 

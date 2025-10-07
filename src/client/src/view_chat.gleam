@@ -30,14 +30,20 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
     selected_conversation,
     conversations,
     online,
+    typing,
   ) = model
 
-  let draft_text = case selected_conversation {
-    None -> ""
+  let #(draft_text, conversation_partner_is_typing) = case
+    selected_conversation
+  {
+    None -> #("", False)
     Some(user) ->
       case dict.get(conversations, user.id) {
-        Error(_) -> ""
-        Ok(conversation) -> conversation.draft_message_text
+        Error(_) -> #("", False)
+        Ok(conversation) -> #(
+          conversation.draft_message_text,
+          typing |> list.any(fn(tuple) { tuple.1 == user.id }),
+        )
       }
   }
 
@@ -145,7 +151,11 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
           selected_conversation,
           conversations,
           session.user_id,
-        ),
+        )
+        |> list.append(case conversation_partner_is_typing {
+          True -> [view_typing_indicator()]
+          False -> []
+        }),
       ),
 
       // Message input area
@@ -254,6 +264,16 @@ fn view_chat_message(
     html.p([class("text-sm")], [
       html.text(string.join(message.text_content, " ")),
     ]),
+  ])
+}
+
+fn view_typing_indicator() -> Element(Msg) {
+  html.div([class("mb-3 p-3 rounded-lg border bg-gray-50 border-gray-200 w-fit")], [
+    html.div([class("flex gap-1 items-center h-5")], [
+      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot")], []),
+      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-200")], []),
+      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-400")], []),
+    ])
   ])
 }
 

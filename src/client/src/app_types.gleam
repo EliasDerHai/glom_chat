@@ -39,6 +39,7 @@ pub type LoginState {
     selected_conversation: Option(UserMiniDto(UserId)),
     conversations: Dict(UserId, Conversation),
     online: Set(UserId),
+    typing: List(#(Int, UserId)),
   )
 }
 
@@ -68,6 +69,7 @@ pub type Msg {
   ShowToast(Toast)
   RemoveToast(Int)
   WsWrapper(WebSocketEvent)
+  IsTypingExpired(Int)
   CheckedAuth(Result(SessionDto, Error))
   NewConversationMsg(NewConversationMsg)
   UserOnMessageChange(String)

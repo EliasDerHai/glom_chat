@@ -2,11 +2,11 @@ import app_types.{
   type Model, type Msg, type NewConversationMsg,
   ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
   ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
-  CheckedAuth, Conversation, Established, GlobalState, LoggedIn, LoginState,
-  LoginSuccess, Model, NewConversation, NewConversationMsg, Pending, PreLogin,
-  RemoveToast, ShowToast, UserConversationPartnerSelect, UserModalClose,
-  UserModalOpen, UserOnLogoutClick, UserOnMessageChange, UserOnSendSubmit,
-  UserSearchInputChange, WsWrapper,
+  CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
+  LoginState, LoginSuccess, Model, NewConversation, NewConversationMsg, Pending,
+  PreLogin, RemoveToast, ShowToast, UserConversationPartnerSelect,
+  UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
+  UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
 import conversation
 import endpoints
@@ -18,6 +18,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
 import gleam/string
+import gleam/time/duration
 import gleam/time/timestamp
 import lustre
 import lustre/effect.{type Effect}
@@ -34,6 +35,7 @@ import socket_message/shared_client_to_server
 import socket_message/shared_server_to_client.{
   IsTyping, NewMessage, OnlineHasChanged,
 }
+import util/time_util
 import util/toast
 import util/toast_state
 import view_chat
@@ -71,14 +73,17 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   let login = fn(session_dto) {
     #(
       Model(
-        LoggedIn(LoginState(
-          session_dto,
-          Pending(timestamp.system_time()),
-          None,
-          None,
-          dict.new(),
-          set.new(),
-        )),
+        LoggedIn(
+          LoginState(
+            session_dto,
+            Pending(timestamp.system_time()),
+            None,
+            None,
+            dict.new(),
+            set.new(),
+            [],
+          ),
+        ),
         model.global_state,
       ),
       effect.batch([
@@ -140,6 +145,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### WEBSOCKET ###
     WsWrapper(socket_event) -> handle_socket_event(model, socket_event)
+    IsTypingExpired(id) -> remove_is_typing(model, id)
 
     // ### CHAT ###
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
@@ -166,6 +172,20 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       }
     }
   }
+}
+
+fn remove_is_typing(model: Model, id: Int) -> #(Model, Effect(Msg)) {
+  let model = case model.app_state {
+    LoggedIn(login_state) -> {
+      let typing =
+        login_state.typing |> list.filter(fn(tuple) { tuple.0 != id })
+
+      Model(LoggedIn(LoginState(..login_state, typing:)), model.global_state)
+    }
+    _ -> model
+  }
+
+  #(model, effect.none())
 }
 
 fn update_draft_message_and_notify_typing(
@@ -364,24 +384,21 @@ fn handle_new_conversation_msg(
 }
 
 fn send_message(model: Model) -> Effect(Msg) {
-  let assert LoggedIn(LoginState(
-    session:,
-    web_socket: _,
-    new_conversation: _,
-    selected_conversation: Some(selected_conversation),
-    conversations:,
-    online: _,
-  )) = model.app_state
-    as "must be logged in & conversation selected at this point"
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+  let assert Some(selected_conversation) = login_state.selected_conversation
+    as "conversation must be selected at this point"
 
-  let draft_text = case dict.get(conversations, selected_conversation.id) {
+  let draft_text = case
+    dict.get(login_state.conversations, selected_conversation.id)
+  {
     Error(_) -> panic as "conversation doesn't exist"
     Ok(conversation) -> conversation.draft_message_text
   }
 
   let draft_message: shared_chat.ClientChatMessage =
     ChatMessage(
-      sender: session.user_id,
+      sender: login_state.session.user_id,
       receiver: selected_conversation.id,
       delivery: shared_chat.Sending,
       sent_time: None,
@@ -448,8 +465,27 @@ fn handle_socket_event(
         Ok(socket_message) -> {
           case socket_message {
             IsTyping(user) -> {
-              echo user
-              #(model, effect.none())
+              let assert LoggedIn(login_state) = model.app_state
+                as "must be logged in at this point"
+
+              let tuple = #(time_util.millis_now(), user)
+              let typing = login_state.typing |> list.append([tuple])
+
+              let timeout_effect =
+                effect.from(fn(dispatch) {
+                  time_util.set_timeout(
+                    fn() { dispatch(IsTypingExpired(tuple.0)) },
+                    duration.seconds(2),
+                  )
+                })
+
+              #(
+                Model(
+                  LoggedIn(LoginState(..login_state, typing:)),
+                  model.global_state,
+                ),
+                timeout_effect,
+              )
             }
 
             NewMessage(message:) -> {
