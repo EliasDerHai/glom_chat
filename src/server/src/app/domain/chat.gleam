@@ -14,7 +14,6 @@ import gleam/dynamic/decode
 import gleam/http
 import gleam/json
 import gleam/list
-import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/set
@@ -48,7 +47,7 @@ fn message_from_rows(
     sender: row.sender_id |> UserId,
     receiver: row.receiver_id |> UserId,
     delivery: row.delivery,
-    sent_time: row.created_at |> option.Some,
+    sent_time: row.created_at,
     text_content: row.text_content,
   )
 }
@@ -213,24 +212,21 @@ pub fn post_chat_message(
           }),
         )
 
+        let local_now =
+          timestamp.system_time() |> timestamp.add(calendar.local_offset())
+
         ChatMessage(
           id: shared_chat_id.ChatId(uuid.v7()),
           receiver:,
           sender: session.user_id,
           delivery: sql.Sent,
-          sent_time: option.Some(timestamp.system_time()),
+          sent_time: local_now,
           text_content:,
         )
         |> Ok
       })
       |> result.flatten,
     )
-
-    let local_now =
-      timestamp.system_time() |> timestamp.add(calendar.local_offset())
-
-    let msg =
-      ChatMessage(..msg, delivery: sql.Sent, sent_time: option.Some(local_now))
 
     use _ <- result.try(
       insert_chat_message(db, msg)

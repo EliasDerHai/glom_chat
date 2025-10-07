@@ -21,7 +21,6 @@ import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/button
 import util/icons
 import util/list_extension
-import util/option_extension
 import util/time_util
 
 pub fn view_chat(model: LoginState) -> Element(Msg) {
@@ -299,9 +298,9 @@ fn view_chat_message(
       html.span(
         [class("text-xs text-gray-500")],
         message.sent_time
-          |> option.map(time_util.to_hhmm)
-          |> option.map(html.text)
-          |> option_extension.to_list,
+          |> time_util.to_hhmm
+          |> html.text
+          |> list_extension.of_one,
       ),
     ]),
     html.p(

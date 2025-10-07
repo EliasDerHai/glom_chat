@@ -4,7 +4,6 @@ import chat/shared_chat_id.{ChatId}
 import conversation
 import gleam/dict
 import gleam/list
-import gleam/option.{Some}
 import gleam/time/timestamp
 import gleeunit/should
 import shared_user.{type UserId, UserId, Username}
@@ -15,7 +14,7 @@ fn msg(unix_secs: Int) -> ClientChatMessage {
     sender: UserId("sender"),
     receiver: UserId("receiver"),
     delivery: Sent,
-    sent_time: Some(timestamp.from_unix_seconds(unix_secs)),
+    sent_time: timestamp.from_unix_seconds(unix_secs),
     text_content: ["msg"],
   )
 }

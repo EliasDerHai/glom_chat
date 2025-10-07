@@ -3,7 +3,6 @@ import chat/shared_chat_conversation.{ChatConversationDto}
 import chat/shared_chat_id.{ChatId}
 import gleam/io
 import gleam/json
-import gleam/option
 import gleam/time/timestamp
 import gleeunit
 import shared_user.{UserDto, UserId, UserMiniDto}
@@ -67,7 +66,7 @@ pub fn chat_message_json_roundtrip_test() {
       sender: "sender-id" |> UserId,
       receiver: "receiver-id" |> UserId,
       delivery: shared_chat.Sent,
-      sent_time: option.Some(timestamp.from_unix_seconds(1_692_859_999)),
+      sent_time: timestamp.from_unix_seconds(1_692_859_999),
       text_content: ["Hello", "How are you?"],
     )
 
@@ -95,42 +94,6 @@ pub fn chat_message_json_roundtrip_test() {
   assert_equal(input, actual)
 }
 
-pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
-  // arrange - test with None sent_time
-  let input =
-    ChatMessage(
-      id: "chat-id" |> ChatId,
-      sender: "sender-id" |> UserId,
-      receiver: "receiver-id" |> UserId,
-      delivery: shared_chat.Sending,
-      sent_time: option.None,
-      text_content: ["Draft message"],
-    )
-
-  // act serialize
-  let actual = input |> shared_chat.chat_message_to_json()
-
-  // assert serialize
-  let expected =
-    json.object([
-      #("id", json.string("chat-id")),
-      #("sender", json.string("sender-id")),
-      #("receiver", json.string("receiver-id")),
-      #("delivery", json.string("sending")),
-      #("sent_time", json.null()),
-      #("text_content", json.array(["Draft message"], json.string)),
-    ])
-  assert_equal(expected, actual)
-
-  // act deserialize
-  let json_text = json.to_string(actual)
-  let assert Ok(actual) =
-    json.parse(from: json_text, using: shared_chat.chat_message_decoder())
-
-  // assert deserialize
-  assert_equal(input, actual)
-}
-
 pub fn chat_conversation_dto_json_roundtrip_test() {
   // arrange
   let input =
@@ -141,7 +104,7 @@ pub fn chat_conversation_dto_json_roundtrip_test() {
           sender: "sender-id" |> UserId,
           receiver: "receiver-id" |> UserId,
           delivery: shared_chat.Sent,
-          sent_time: option.Some(timestamp.from_unix_seconds(1_692_859_999)),
+          sent_time: timestamp.from_unix_seconds(1_692_859_999),
           text_content: ["Hello"],
         ),
       ],

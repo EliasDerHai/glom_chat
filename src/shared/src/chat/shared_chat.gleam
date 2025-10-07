@@ -2,7 +2,6 @@ import chat/shared_chat_id.{type ClientChatId, ChatId}
 import gleam/dynamic/decode
 import gleam/float
 import gleam/json.{type Json}
-import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import shared_user.{type UserId, UserId}
 
@@ -18,7 +17,7 @@ pub type ChatMessage(chat_id, user_id, chat_message_delivery) {
     receiver: user_id,
     delivery: chat_message_delivery,
     /// utc when server received (sent) message
-    sent_time: Option(Timestamp),
+    sent_time: Timestamp,
     /// `\n` is splitted to allow delimiter agnostic newlines
     text_content: List(String),
   )
@@ -65,14 +64,13 @@ pub fn chat_message_to_json(chat_message: ClientChatMessage) -> Json {
     #("sender", json.string(sender.v)),
     #("receiver", json.string(receiver.v)),
     #("delivery", chat_message_delivery_to_json(delivery)),
-    #("sent_time", case sent_time {
-      option.None -> json.null()
-      option.Some(value) ->
-        value
+    #(
+      "sent_time",
+      sent_time
         |> timestamp.to_unix_seconds
         |> float.round
-        |> json.int
-    }),
+        |> json.int,
+    ),
     #("text_content", json.array(text_content, json.string)),
   ])
 }
@@ -82,7 +80,7 @@ pub fn chat_message_decoder() -> decode.Decoder(ClientChatMessage) {
   use sender <- decode.field("sender", decode.string)
   use receiver <- decode.field("receiver", decode.string)
   use delivery <- decode.field("delivery", chat_message_delivery_decoder())
-  use sent_time <- decode.field("sent_time", decode.int |> decode.optional)
+  use sent_time <- decode.field("sent_time", decode.int)
   use text_content <- decode.field("text_content", decode.string |> decode.list)
 
   ChatMessage(
@@ -90,7 +88,7 @@ pub fn chat_message_decoder() -> decode.Decoder(ClientChatMessage) {
     sender: sender |> UserId,
     receiver: receiver |> UserId,
     delivery:,
-    sent_time: sent_time |> option.map(timestamp.from_unix_seconds),
+    sent_time: sent_time |> timestamp.from_unix_seconds,
     text_content:,
   )
   |> decode.success
