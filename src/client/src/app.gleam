@@ -29,7 +29,7 @@ import lustre/element/html
 import lustre_websocket as ws
 import pre_login
 import rsvp.{type Error}
-import shared_chat.{ChatMessage}
+import shared_chat.{type ClientChatMessage, ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
@@ -233,10 +233,7 @@ fn fetch_conversations() -> Effect(Msg) {
   )
 }
 
-fn handle_api_chat_message_send_response(
-  model: Model,
-  msg: shared_chat.ClientChatMessage,
-) {
+fn handle_api_chat_message_send_response(model: Model, msg: ClientChatMessage) {
   let app_state = case model.app_state {
     LoggedIn(l) -> {
       let conversations =
