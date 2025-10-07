@@ -6,10 +6,11 @@ import app_types.{
 }
 import conversation
 import gleam/dict
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
-import gleam/set
+import gleam/set.{type Set}
 import gleam/string
 import lustre/attribute.{class}
 import lustre/element.{type Element}
@@ -19,6 +20,7 @@ import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/button
 import util/icons
+import util/list_extension
 import util/option_extension
 import util/time_util
 
@@ -65,7 +67,8 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
           attribute.placeholder("Search chats..."),
         ]),
       ]),
-      // Chat List
+
+      // Conversations
       html.div([class("flex-1 overflow-y-auto")], [
         html.button(
           [
@@ -82,40 +85,7 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
         ..conversations
         |> conversation.sort_conversations
         |> list.map(fn(key_value) {
-          html.button(
-            [
-              class(
-                "p-4 hover:bg-gray-100 cursor-pointer w-full text-left flex justify-start items-center",
-              ),
-              attribute.title(case online |> set.contains(key_value.0) {
-                False -> "offline"
-                True -> "online"
-              }),
-              event.on_click(
-                NewConversationMsg(
-                  UserConversationPartnerSelect(shared_user.UserMiniDto(
-                    key_value.0,
-                    { key_value.1 }.conversation_partner,
-                  )),
-                ),
-              ),
-            ],
-            [
-              html.text({ key_value.1 }.conversation_partner.v),
-              html.div(
-                [
-                  class(
-                    "size-2 rounded-full ml-1 "
-                    <> case online |> set.contains(key_value.0) {
-                      False -> "bg-gray-400"
-                      True -> "bg-green-500"
-                    },
-                  ),
-                ],
-                [],
-              ),
-            ],
-          )
+          show_conversation(key_value.0, key_value.1, online)
         })
       ]),
       // Logout Button
@@ -200,6 +170,74 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
   ])
 }
 
+fn show_conversation(
+  other: UserId,
+  conversation: Conversation,
+  online: Set(UserId),
+) -> Element(Msg) {
+  let unread_message_count =
+    conversation.messages
+    |> list.count(fn(m) { m.delivery != shared_chat.Read && m.sender == other })
+
+  let title =
+    case online |> set.contains(other) {
+      False -> "offline"
+      True -> "online"
+    }
+    <> case unread_message_count {
+      0 -> ""
+      1 -> " - 1 unread message"
+      n -> " - " <> n |> int.to_string <> " unread messages"
+    }
+
+  html.button(
+    [
+      class(
+        "p-4 hover:bg-gray-100 cursor-pointer w-full flex justify-start items-center gap-1",
+      ),
+      attribute.title(title),
+      event.on_click(
+        NewConversationMsg(
+          UserConversationPartnerSelect(shared_user.UserMiniDto(
+            other,
+            conversation.conversation_partner,
+          )),
+        ),
+      ),
+    ],
+    [
+      conversation.conversation_partner.v
+        |> html.text
+        |> list_extension.of_one
+        |> html.span([], _),
+      html.div(
+        [
+          class(
+            "size-2 rounded-full "
+            <> case online |> set.contains(other) {
+              False -> "bg-gray-400"
+              True -> "bg-green-500"
+            },
+          ),
+        ],
+        [],
+      ),
+      case unread_message_count > 0 {
+        True ->
+          html.span(
+            [
+              class("bg-red-500 text-white text-xs rounded-full size-4"),
+            ],
+            [
+              html.text(int.to_string(unread_message_count)),
+            ],
+          )
+        False -> html.div([], [])
+      },
+    ],
+  )
+}
+
 fn view_chat_messages(
   selected_conversation: option.Option(UserMiniDto(UserId)),
   conversations: dict.Dict(UserId, Conversation),
@@ -266,9 +304,20 @@ fn view_chat_message(
           |> option_extension.to_list,
       ),
     ]),
-    html.p([class("text-sm")], [
-      html.text(string.join(message.text_content, " ")),
-    ]),
+    html.p(
+      [
+        class(
+          "text-sm "
+          <> case self_is_sender {
+            False -> ""
+            True -> "text-right"
+          },
+        ),
+      ],
+      [
+        html.text(string.join(message.text_content, " ")),
+      ],
+    ),
   ])
 }
 
