@@ -6,6 +6,9 @@ import app/persist/sql.{
 }
 import app/registry.{type SocketRegistry}
 import app/util/query_result
+import chat/shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
+import chat/shared_chat_conversation
+import chat/shared_chat_id.{type ClientChatId, ChatId}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/json
@@ -17,8 +20,6 @@ import gleam/set
 import gleam/time/calendar
 import gleam/time/timestamp
 import pog
-import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
-import shared_chat_conversation
 import socket_message/shared_server_to_client
 import util/result_extension
 import wisp.{type Request, type Response}
@@ -28,8 +29,11 @@ import youid/uuid
 // Types
 // ################################################################################
 
+type ChatId =
+  shared_chat_id.ChatId(uuid.Uuid)
+
 pub type ServerChatMessage =
-  ChatMessage(UserId, ChatMessageDelivery)
+  ChatMessage(ChatId, UserId, ChatMessageDelivery)
 
 // ################################################################################
 // Mappings
@@ -39,6 +43,7 @@ fn message_from_rows(
   row: SelectChatMessagesBySenderIdOrReceiverIdRow,
 ) -> ServerChatMessage {
   ChatMessage(
+    id: row.id |> ChatId,
     sender: row.sender_id |> UserId,
     receiver: row.receiver_id |> UserId,
     delivery: row.delivery,
@@ -50,10 +55,12 @@ fn message_from_rows(
 fn message_from_shared_message(
   msg: ClientChatMessage,
 ) -> Result(ServerChatMessage, Nil) {
+  use id <- result.try(msg.id |> from_shared_chat_id)
   use sender <- result.try(msg.sender |> user.from_shared_user_id)
   use receiver <- result.try(msg.receiver |> user.from_shared_user_id)
 
   ChatMessage(
+    id:,
     sender:,
     receiver:,
     delivery: case msg.delivery {
@@ -70,12 +77,23 @@ fn message_from_shared_message(
 
 fn to_shared_message(msg: ServerChatMessage) -> ClientChatMessage {
   ChatMessage(
+    id: msg.id |> to_shared_chat_id,
     sender: msg.sender |> user.to_shared_user_id,
     receiver: msg.receiver |> user.to_shared_user_id,
     delivery: msg.delivery |> to_shared_chat_message_delivery,
     sent_time: msg.sent_time,
     text_content: msg.text_content,
   )
+}
+
+fn to_shared_chat_id(chat_id: ChatId) -> ClientChatId {
+  chat_id.v |> uuid.to_string |> shared_chat_id.ChatId
+}
+
+fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
+  chat_id.v
+  |> uuid.from_string
+  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
 }
 
 fn to_shared_chat_message_delivery(
@@ -95,7 +113,7 @@ fn to_shared_chat_message_delivery(
 pub fn get_chat_messages_for_user(
   db: DbPool,
   user_id: UserId,
-) -> Result(List(ChatMessage(UserId, ChatMessageDelivery)), pog.QueryError) {
+) -> Result(List(ServerChatMessage), pog.QueryError) {
   db
   |> pool.conn()
   |> sql.select_chat_messages_by_sender_id_or_receiver_id(user_id.v)
@@ -106,7 +124,7 @@ pub fn get_chat_messages_for_user(
 
 pub fn insert_chat_message(
   db: DbPool,
-  msg: ChatMessage(UserId, ChatMessageDelivery),
+  msg: ServerChatMessage,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   db
   |> pool.conn
@@ -132,7 +150,7 @@ pub fn chat_conversations(
   use <- wisp.require_method(req, http.Get)
 
   {
-    use messages: List(ChatMessage(UserId, ChatMessageDelivery)) <- result.try(
+    use messages: List(ServerChatMessage) <- result.try(
       get_chat_messages_for_user(db, session.user_id)
       |> query_result.map_query_result(),
     )

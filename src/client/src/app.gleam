@@ -8,6 +8,10 @@ import app_types.{
   UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
   UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
+import chat/shared_chat.{type ClientChatMessage, ChatMessage}
+import chat/shared_chat_conversation.{
+  type ChatConversationDto, ChatConversationDto,
+}
 import conversation
 import endpoints
 import gleam/bool
@@ -29,8 +33,6 @@ import lustre/element/html
 import lustre_websocket as ws
 import pre_login
 import rsvp.{type Error}
-import shared_chat.{type ClientChatMessage, ChatMessage}
-import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import socket_message/shared_client_to_server
@@ -427,7 +429,10 @@ fn send_message(model: Model) -> Effect(Msg) {
   }
 
   let draft_message: shared_chat.ClientChatMessage =
+    // FIXME: not secure (could send as any other user by manipulating the sender) 
+    // this should be a minimal send-to - all derived data should be set by the server
     ChatMessage(
+      id: todo as "this doesn't make sense ... we need a send-dto without all this crap",
       sender: login_state.session.user_id,
       receiver: selected_conversation.id,
       delivery: shared_chat.Sending,

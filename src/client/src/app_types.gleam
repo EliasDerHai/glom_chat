@@ -1,11 +1,11 @@
+import chat/shared_chat.{type ClientChatMessage}
+import chat/shared_chat_conversation.{type ChatConversationDto}
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 import gleam/set.{type Set}
 import gleam/time/timestamp.{type Timestamp}
 import lustre_websocket.{type WebSocket, type WebSocketEvent}
 import rsvp.{type Error}
-import shared_chat.{type ClientChatMessage}
-import shared_chat_conversation.{type ChatConversationDto}
 import shared_session.{type SessionDto}
 import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/toast.{type Toast}

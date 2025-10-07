@@ -4,6 +4,7 @@ import app_types.{
   UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
   UserOnSendSubmit, UserSearchInputChange,
 }
+import chat/shared_chat.{type ClientChatMessage}
 import conversation
 import gleam/dict
 import gleam/int
@@ -16,7 +17,6 @@ import lustre/attribute.{class}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
-import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, type UserMiniDto, type Username}
 import util/button
 import util/icons

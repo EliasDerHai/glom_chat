@@ -1,15 +1,17 @@
 import app_types.{type Conversation, Conversation}
+import chat/shared_chat.{type ClientChatMessage, ChatMessage, Sent}
+import chat/shared_chat_id.{ChatId}
 import conversation
 import gleam/dict
 import gleam/list
 import gleam/option.{Some}
 import gleam/time/timestamp
 import gleeunit/should
-import shared_chat.{type ClientChatMessage, ChatMessage, Sent}
 import shared_user.{type UserId, UserId, Username}
 
 fn msg(unix_secs: Int) -> ClientChatMessage {
   ChatMessage(
+    id: ChatId("chat-id"),
     sender: UserId("sender"),
     receiver: UserId("receiver"),
     delivery: Sent,

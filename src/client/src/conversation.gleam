@@ -1,4 +1,5 @@
 import app_types.{type Conversation}
+import chat/shared_chat.{type ClientChatMessage}
 import gleam/dict
 import gleam/list
 import gleam/option.{type Option}
@@ -6,7 +7,6 @@ import gleam/order
 import gleam/result
 import gleam/string
 import gleam/time/timestamp.{type Timestamp}
-import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId}
 
 // latest first

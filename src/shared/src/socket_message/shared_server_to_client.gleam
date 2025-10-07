@@ -1,6 +1,6 @@
+import chat/shared_chat.{type ClientChatMessage}
 import gleam/dynamic/decode
 import gleam/json.{type Json}
-import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, UserId}
 
 pub type ServerToClientSocketMessage {

@@ -1,3 +1,4 @@
+import chat/shared_chat_id.{type ClientChatId, ChatId}
 import gleam/dynamic/decode
 import gleam/float
 import gleam/json.{type Json}
@@ -6,10 +7,11 @@ import gleam/time/timestamp.{type Timestamp}
 import shared_user.{type UserId, UserId}
 
 pub type ClientChatMessage =
-  ChatMessage(UserId, ChatMessageDelivery)
+  ChatMessage(ClientChatId, UserId, ChatMessageDelivery)
 
-pub type ChatMessage(user_id, chat_message_delivery) {
+pub type ChatMessage(chat_id, user_id, chat_message_delivery) {
   ChatMessage(
+    id: chat_id,
     /// user_id
     sender: user_id,
     /// username
@@ -55,12 +57,11 @@ fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
   }
 }
 
-pub fn chat_message_to_json(
-  chat_message: ChatMessage(UserId, ChatMessageDelivery),
-) -> Json {
-  let ChatMessage(sender:, receiver:, delivery:, sent_time:, text_content:) =
+pub fn chat_message_to_json(chat_message: ClientChatMessage) -> Json {
+  let ChatMessage(id:, sender:, receiver:, delivery:, sent_time:, text_content:) =
     chat_message
   json.object([
+    #("id", json.string(id.v)),
     #("sender", json.string(sender.v)),
     #("receiver", json.string(receiver.v)),
     #("delivery", chat_message_delivery_to_json(delivery)),
@@ -76,9 +77,8 @@ pub fn chat_message_to_json(
   ])
 }
 
-pub fn chat_message_decoder() -> decode.Decoder(
-  ChatMessage(UserId, ChatMessageDelivery),
-) {
+pub fn chat_message_decoder() -> decode.Decoder(ClientChatMessage) {
+  use id <- decode.field("id", decode.string)
   use sender <- decode.field("sender", decode.string)
   use receiver <- decode.field("receiver", decode.string)
   use delivery <- decode.field("delivery", chat_message_delivery_decoder())
@@ -86,6 +86,7 @@ pub fn chat_message_decoder() -> decode.Decoder(
   use text_content <- decode.field("text_content", decode.string |> decode.list)
 
   ChatMessage(
+    id: id |> ChatId,
     sender: sender |> UserId,
     receiver: receiver |> UserId,
     delivery:,
