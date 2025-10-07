@@ -32,7 +32,7 @@ fn integration_test(test_fn: fn() -> a) {
   case env.get_bool(integration_test_flag) {
     Error(_) -> {
       { "Skipping integration test (" <> integration_test_flag <> " not set)" }
-      |> io.println
+      |> io.print
     }
     Ok(False) -> {
       {
@@ -40,7 +40,7 @@ fn integration_test(test_fn: fn() -> a) {
         <> integration_test_flag
         <> " set to FALSE)"
       }
-      |> io.println
+      |> io.print
     }
     Ok(True) -> {
       "integration test started ..."
