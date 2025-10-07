@@ -53,6 +53,10 @@ pub fn conversations() {
   "chats/conversations" |> to_req
 }
 
+pub fn conversation_mark_read() {
+  "chats/conversations/read" |> to_req
+}
+
 pub fn socket_address() {
   get_socket_url()
 }

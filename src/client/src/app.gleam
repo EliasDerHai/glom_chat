@@ -1,5 +1,5 @@
 import app_types.{
-  type Model, type Msg, type NewConversationMsg,
+  type LoginState, type Model, type Msg, type NewConversationMsg,
   ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
   ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
   CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
@@ -10,12 +10,14 @@ import app_types.{
 }
 import conversation
 import endpoints
+import gleam/bool
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/set
 import gleam/string
 import gleam/time/duration
@@ -30,7 +32,7 @@ import rsvp.{type Error}
 import shared_chat.{ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
-import shared_user.{Username, UsersByUsernameDto}
+import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import socket_message/shared_client_to_server
 import socket_message/shared_server_to_client.{
   IsTyping, NewMessage, OnlineHasChanged,
@@ -310,76 +312,107 @@ fn handle_new_conversation_msg(
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
 
-  let #(new_conversation, effect) = case msg {
-    UserModalOpen -> #(Some(NewConversation([])), search_usernames(""))
-    UserModalClose -> #(None, effect.none())
-    UserSearchInputChange(v) -> #(
-      login_state.new_conversation,
-      search_usernames(v),
-    )
-    ApiSearchResponse(Ok(items)) -> #(
-      Some(
-        NewConversation(
-          list.filter(items, fn(item) { item.id != login_state.session.user_id }),
-        ),
+  case msg {
+    UserModalOpen -> handle_modal_open(model, login_state)
+    UserModalClose -> handle_modal_close(model, login_state)
+    UserSearchInputChange(v) -> handle_search_input(model, v)
+    ApiSearchResponse(res) -> handle_search(model, login_state, res)
+    UserConversationPartnerSelect(dto) -> handle_select(model, login_state, dto)
+  }
+}
+
+fn handle_modal_open(
+  model: Model,
+  login_state: LoginState,
+) -> #(Model, Effect(Msg)) {
+  #(
+    Model(
+      LoggedIn(
+        LoginState(..login_state, new_conversation: Some(NewConversation([]))),
       ),
-      effect.none(),
-    )
-    ApiSearchResponse(Error(_)) -> #(
-      login_state.new_conversation,
-      effect.none(),
-    )
-    UserConversationPartnerSelect(_) -> #(None, effect.none())
-  }
+      model.global_state,
+    ),
+    search_usernames(""),
+  )
+}
 
-  let #(selected_conversation, conversations, additional_effect) = {
-    case msg {
-      ApiSearchResponse(Error(_)) -> {
-        let toast_effect =
-          effect.from(fn(dispatch) {
-            dispatch(
-              ShowToast(toast.create_error_toast("Failed to search users")),
-            )
-          })
+fn handle_modal_close(
+  model: Model,
+  login_state: LoginState,
+) -> #(Model, Effect(Msg)) {
+  #(
+    Model(
+      LoggedIn(LoginState(..login_state, new_conversation: None)),
+      model.global_state,
+    ),
+    effect.none(),
+  )
+}
 
-        #(
-          login_state.selected_conversation,
-          login_state.conversations,
-          toast_effect,
-        )
-      }
-      UserConversationPartnerSelect(dto) -> {
-        let conversations =
-          dict.upsert(login_state.conversations, dto.id, fn(curr) {
-            case curr {
-              None -> Conversation([], dto.username, "")
-              Some(c) -> c
-            }
-          })
+fn handle_search_input(model: Model, value: String) -> #(Model, Effect(Msg)) {
+  #(model, search_usernames(value))
+}
 
-        #(Some(dto), conversations, effect.none())
-      }
-      _ -> #(
-        login_state.selected_conversation,
-        login_state.conversations,
-        effect.none(),
-      )
-    }
-  }
+fn handle_search(
+  model: Model,
+  login_state: LoginState,
+  res: Result(List(UserMiniDto(UserId)), Error),
+) -> #(Model, Effect(Msg)) {
+  use <- bool.lazy_guard(result.is_error(res), fn() {
+    let toast_effect =
+      effect.from(fn(dispatch) {
+        dispatch(ShowToast(toast.create_error_toast("Failed to search users")))
+      })
+
+    #(model, toast_effect)
+  })
+
+  let assert Ok(items) = res
+
+  let filtered_items =
+    list.filter(items, fn(item) { item.id != login_state.session.user_id })
 
   #(
     Model(
       LoggedIn(
         LoginState(
           ..login_state,
-          conversations:,
-          new_conversation:,
-          selected_conversation:,
+          new_conversation: Some(NewConversation(filtered_items)),
         ),
       ),
       model.global_state,
     ),
-    effect.batch([effect, additional_effect]),
+    effect.none(),
+  )
+}
+
+fn handle_select(
+  model: Model,
+  login_state: LoginState,
+  dto: UserMiniDto(UserId),
+) -> #(Model, Effect(Msg)) {
+  let conversations =
+    dict.upsert(login_state.conversations, dto.id, fn(curr) {
+      case curr {
+        None -> Conversation([], dto.username, "")
+        Some(c) -> c
+      }
+    })
+
+  #(
+    Model(
+      LoggedIn(
+        LoginState(
+          ..login_state,
+          new_conversation: None,
+          selected_conversation: Some(dto),
+          conversations: conversations,
+        ),
+      ),
+      model.global_state,
+    ),
+    // TODO: send read confirmation
+    effect.none(),
   )
 }
 

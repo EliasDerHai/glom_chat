@@ -98,7 +98,7 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
     ChatMessage(
       sender: "sender-id" |> UserId,
       receiver: "receiver-id" |> UserId,
-      delivery: shared_chat.Draft,
+      delivery: shared_chat.Sending,
       sent_time: option.None,
       text_content: ["Draft message"],
     )
@@ -111,7 +111,7 @@ pub fn chat_message_json_roundtrip_with_null_sent_time_test() {
     json.object([
       #("sender", json.string("sender-id")),
       #("receiver", json.string("receiver-id")),
-      #("delivery", json.string("draft")),
+      #("delivery", json.string("sending")),
       #("sent_time", json.null()),
       #("text_content", json.array(["Draft message"], json.string)),
     ])

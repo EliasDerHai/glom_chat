@@ -23,8 +23,6 @@ pub type ChatMessage(user_id, chat_message_delivery) {
 }
 
 pub type ChatMessageDelivery {
-  /// user is actively typing msg or switched tabs/conversations but hasn't sent msg yet
-  Draft
   /// msg is being sent server hasn't received
   Sending
   /// msg has been sent to server
@@ -39,7 +37,6 @@ fn chat_message_delivery_to_json(
   chat_message_delivery: ChatMessageDelivery,
 ) -> Json {
   case chat_message_delivery {
-    Draft -> json.string("draft")
     Sending -> json.string("sending")
     Sent -> json.string("sent")
     Delivered -> json.string("delivered")
@@ -50,12 +47,11 @@ fn chat_message_delivery_to_json(
 fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
   use variant <- decode.then(decode.string)
   case variant {
-    "draft" -> decode.success(Draft)
     "sending" -> decode.success(Sending)
     "sent" -> decode.success(Sent)
     "delivered" -> decode.success(Delivered)
     "read" -> decode.success(Read)
-    _ -> decode.failure(Draft, "ChatMessageDelivery")
+    _ -> decode.failure(Sent, "ChatMessageDelivery")
   }
 }
 
