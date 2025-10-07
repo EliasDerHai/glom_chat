@@ -152,40 +152,45 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
           conversations,
           session.user_id,
         )
-        |> list.append(case conversation_partner_is_typing {
-          True -> [view_typing_indicator()]
-          False -> []
-        }),
+          |> list.append(case conversation_partner_is_typing {
+            True -> [view_typing_indicator()]
+            False -> []
+          }),
       ),
 
       // Message input area
       html.footer([class("p-4 bg-white border-t border-gray-200")], [
-        html.div([class("flex")], [
-          html.input([
-            class(
-              "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 "
-              <> "disabled:bg-gray-100 ",
-            ),
-            attribute.disabled(selected_conversation |> option.is_none),
-            attribute.value(draft_text),
-            attribute.placeholder("Message..."),
-            event.on_input(UserOnMessageChange) |> event.debounce(300),
+        html.form(
+          [
+            class("flex"),
             event.on_submit(fn(_) { UserOnSendSubmit }),
-          ]),
-
-          html.button(
-            [
+          ],
+          [
+            html.input([
               class(
-                "bg-blue-600 text-white font-semibold py-2 px-4 rounded-r-md transition-colors"
-                |> button.default_disabled_class
-                |> button.default_hovered_class,
+                "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 "
+                <> "disabled:bg-gray-100 ",
               ),
               attribute.disabled(selected_conversation |> option.is_none),
-              event.on_click(UserOnSendSubmit),
-            ],
-            [html.text("Send")],
-          ),
-        ]),
+              attribute.value(draft_text),
+              attribute.placeholder("Message..."),
+              event.on_input(UserOnMessageChange) |> event.debounce(300),
+            ]),
+
+            html.button(
+              [
+                class(
+                  "bg-blue-600 text-white font-semibold py-2 px-4 rounded-r-md transition-colors"
+                  |> button.default_disabled_class
+                  |> button.default_hovered_class,
+                ),
+                attribute.disabled(selected_conversation |> option.is_none),
+                attribute.type_("submit"),
+              ],
+              [html.text("Send")],
+            ),
+          ],
+        ),
       ]),
     ]),
     case new_conv {
@@ -268,13 +273,33 @@ fn view_chat_message(
 }
 
 fn view_typing_indicator() -> Element(Msg) {
-  html.div([class("mb-3 p-3 rounded-lg border bg-gray-50 border-gray-200 w-fit")], [
-    html.div([class("flex gap-1 items-center h-5")], [
-      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot")], []),
-      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-200")], []),
-      html.span([class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-400")], []),
-    ])
-  ])
+  html.div(
+    [class("mb-3 p-3 rounded-lg border bg-gray-50 border-gray-200 w-fit")],
+    [
+      html.div([class("flex gap-1 items-center h-5")], [
+        html.span(
+          [class("w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot")],
+          [],
+        ),
+        html.span(
+          [
+            class(
+              "w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-200",
+            ),
+          ],
+          [],
+        ),
+        html.span(
+          [
+            class(
+              "w-2 h-2 bg-gray-600 rounded-full animate-bounce-dot animation-delay-400",
+            ),
+          ],
+          [],
+        ),
+      ]),
+    ],
+  )
 }
 
 fn view_new_conversation(state: NewConversation) -> Element(Msg) {
