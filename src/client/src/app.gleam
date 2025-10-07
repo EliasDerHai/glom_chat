@@ -29,8 +29,11 @@ import rsvp.{type Error}
 import shared_chat.{ChatMessage}
 import shared_chat_conversation.{type ChatConversationDto, ChatConversationDto}
 import shared_session
-import shared_socket_message.{IsTyping, NewMessage, OnlineHasChanged}
 import shared_user.{Username, UsersByUsernameDto}
+import socket_message/shared_client_to_server
+import socket_message/shared_server_to_client.{
+  IsTyping, NewMessage, OnlineHasChanged,
+}
 import util/toast
 import util/toast_state
 import view_chat
@@ -140,7 +143,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### CHAT ###
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
-    UserOnMessageChange(text) -> update_draft_message(model, text)
+    UserOnMessageChange(text) ->
+      update_draft_message_and_notify_typing(model, text)
     UserOnSendSubmit -> #(model, send_message(model))
     ApiChatMessageSendResponse(r) ->
       case r {
@@ -164,7 +168,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn update_draft_message(model: Model, text: String) -> #(Model, Effect(Msg)) {
+fn update_draft_message_and_notify_typing(
+  model: Model,
+  text: String,
+) -> #(Model, Effect(Msg)) {
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
   let assert Some(selected_conversation) = login_state.selected_conversation
@@ -181,7 +188,19 @@ fn update_draft_message(model: Model, text: String) -> #(Model, Effect(Msg)) {
 
   let login_state = LoginState(..login_state, conversations:)
 
-  #(Model(LoggedIn(login_state), model.global_state), effect.none())
+  let effect = case login_state.web_socket {
+    Established(socket) -> {
+      let typer = login_state.session.user_id
+      let receiver = selected_conversation.id
+      let message = shared_client_to_server.IsTyping(typer:, receiver:)
+      let body = shared_client_to_server.to_json(message) |> json.to_string
+
+      socket |> ws.send(body)
+    }
+    Pending(_) -> effect.none()
+  }
+
+  #(Model(LoggedIn(login_state), model.global_state), effect)
 }
 
 fn fetch_conversations() -> Effect(Msg) {
@@ -417,7 +436,7 @@ fn handle_socket_event(
       io.println("Received WebSocket message: " <> message)
 
       let parsed_message =
-        json.parse(message, shared_socket_message.socket_message_decoder())
+        json.parse(message, shared_server_to_client.decoder())
 
       case parsed_message {
         Error(e) -> {
@@ -428,8 +447,10 @@ fn handle_socket_event(
         }
         Ok(socket_message) -> {
           case socket_message {
-            // TODO: show typing indicator
-            IsTyping(_user) -> todo
+            IsTyping(user) -> {
+              echo user
+              #(model, effect.none())
+            }
 
             NewMessage(message:) -> {
               let assert LoggedIn(login_state) = model.app_state
@@ -487,6 +508,9 @@ fn handle_socket_event(
             LoginState(
               ..login_state,
               web_socket: Pending(timestamp.system_time()),
+              // reset online-status for all - will be retransmitted after reconnect
+              // otherwise we would always show online-status as of disconnect
+              online: set.new(),
             )
           #(
             Model(LoggedIn(updated_login_state), model.global_state),

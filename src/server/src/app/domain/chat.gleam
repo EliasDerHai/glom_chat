@@ -19,7 +19,7 @@ import gleam/time/timestamp
 import pog
 import shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import shared_chat_conversation
-import shared_socket_message
+import socket_message/shared_server_to_client
 import util/result_extension
 import wisp.{type Request, type Response}
 import youid/uuid
@@ -197,7 +197,7 @@ pub fn post_chat_message(
       registry,
       registry.OnNotifyClient(
         msg.receiver,
-        shared_socket_message.NewMessage(msg |> to_shared_message),
+        shared_server_to_client.NewMessage(msg |> to_shared_message),
       ),
     )
 

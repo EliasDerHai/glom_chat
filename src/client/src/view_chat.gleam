@@ -159,7 +159,8 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
             attribute.disabled(selected_conversation |> option.is_none),
             attribute.value(draft_text),
             attribute.placeholder("Message..."),
-            event.on_change(UserOnMessageChange),
+            event.on_input(UserOnMessageChange) |> event.debounce(300),
+            event.on_submit(fn(_) { UserOnSendSubmit }),
           ]),
 
           html.button(

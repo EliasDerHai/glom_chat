@@ -14,7 +14,8 @@ import gleam/option
 import gleam/otp/actor
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
-import shared_socket_message
+import socket_message/shared_client_to_server
+import socket_message/shared_server_to_client
 import wisp
 import youid/uuid
 
@@ -62,7 +63,9 @@ pub fn handle_ws_request(
         actor.send(registry, OnClientUnregistered(state.user_id))
         Nil
       },
-      handler: fn(state, msg, conn) { handle_ws_message(state, msg, conn, db) },
+      handler: fn(state, msg, conn) {
+        handle_ws_message(state, msg, conn, db, registry)
+      },
     )
   }
 }
@@ -72,10 +75,11 @@ fn handle_ws_message(
   message: WebsocketMessage(registry.ServerSideSocketOp),
   conn: WebsocketConnection,
   db: DbPool,
+  registry: SocketRegistry,
 ) -> Next(WsState, conn) {
   case message {
     mist.Text(text) -> {
-      handle_text_messages(text, conn, db)
+      handle_text_messages(text, conn, db, registry)
       mist.continue(state)
     }
     mist.Binary(_) -> mist.continue(state)
@@ -85,7 +89,7 @@ fn handle_ws_message(
         registry.Send(message) -> {
           let body =
             message
-            |> shared_socket_message.socket_message_to_json
+            |> shared_server_to_client.to_json
             |> json.to_string
 
           let r = conn |> mist.send_text_frame(body)
@@ -114,10 +118,33 @@ fn handle_text_messages(
   raw: String,
   conn: WebsocketConnection,
   _db: DbPool,
+  registry: SocketRegistry,
 ) -> Nil {
   let r = case raw {
     "ping" -> mist.send_text_frame(conn, "pong")
-    _ -> mist.send_text_frame(conn, "echo: " <> raw)
+    "echo" <> tail -> mist.send_text_frame(conn, "echo " <> tail |> string.trim)
+    _ -> {
+      let decoder = shared_client_to_server.decoder()
+      case raw |> json.parse(decoder) {
+        Ok(shared_client_to_server.IsTyping(typer, receiver)) -> {
+          let assert Ok(to_be_notified) = receiver |> user.from_shared_user_id
+            as { "can't notify '" <> receiver.v <> "' - not a UUID" }
+
+          actor.send(
+            registry,
+            registry.OnNotifyClient(
+              to_be_notified,
+              shared_server_to_client.IsTyping(typer),
+            ),
+          )
+        }
+        Error(e) ->
+          wisp.log_error(
+            "could not decode client's socket message: " <> e |> string.inspect,
+          )
+      }
+      Ok(Nil)
+    }
   }
 
   case r {

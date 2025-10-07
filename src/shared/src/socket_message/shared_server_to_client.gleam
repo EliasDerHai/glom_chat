@@ -3,13 +3,13 @@ import gleam/json.{type Json}
 import shared_chat.{type ClientChatMessage}
 import shared_user.{type UserId, UserId}
 
-pub type SocketMessage {
+pub type ServerToClientSocketMessage {
   NewMessage(message: ClientChatMessage)
   IsTyping(user: UserId)
   OnlineHasChanged(online: List(UserId))
 }
 
-pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
+pub fn to_json(socket_message: ServerToClientSocketMessage) -> Json {
   case socket_message {
     NewMessage(message:) ->
       json.object([
@@ -29,7 +29,7 @@ pub fn socket_message_to_json(socket_message: SocketMessage) -> Json {
   }
 }
 
-pub fn socket_message_decoder() -> decode.Decoder(SocketMessage) {
+pub fn decoder() -> decode.Decoder(ServerToClientSocketMessage) {
   use variant <- decode.field("type", decode.string)
 
   case variant {

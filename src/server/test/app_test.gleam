@@ -1,7 +1,10 @@
 import app/util/mailing
 import dot_env/env
+import gleam/dict
 import gleam/io
+import gleam/set
 import gleeunit
+import gleeunit/should
 import youid/uuid
 
 pub fn main() -> Nil {
@@ -48,4 +51,15 @@ fn integration_test(test_fn: fn() -> a) {
       Nil
     }
   }
+}
+
+pub fn collection_equality_test() {
+  let a = uuid.v7()
+  let b = uuid.v7()
+
+  [a, b] |> set.from_list |> should.equal([b, a] |> set.from_list)
+  [a, b] |> should.not_equal([b, a])
+  [a, b] |> should.equal([a, b])
+  dict.from_list([#("a", a), #("b", b)])
+  |> should.equal(dict.from_list([#("b", b), #("a", a)]))
 }

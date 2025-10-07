@@ -1,18 +1,21 @@
 # TODO - Glom Chat Development
 
+
 ## Code & Impl
 
 ### Core Features
+- [ ] Properly handle "message read/unread"
 - [ ] Add message history pagination
-- [ ] Add user online presence indicators
 - [ ] Add typing indicators
 - [ ] Add image posting
 - [ ] Add cache for sessions (no db-trip for every request)
 - [ ] Add chat room/conversation management
 - [ ] Add more friendlist (currently no "blocked", no "invisible users")
 - [ ] Add voice message (record, send, receive, play)
+- [ ] Add PWA manifest
 
 ### UI
+- [ ] Show unread message badge
 - [ ] Add accessibility improvements (keyboard navigation)
 - [ ] Make Sidebar width draggable
 
@@ -20,8 +23,6 @@
 - [ ] Add rate limiting
 - [ ] Add input validation and sanitization
 
-### Production
-- [ ] Add PWA manifest
 
 ## Infrastructure
 
@@ -34,6 +35,7 @@
 - [ ] Add automated tests for API endpoints
 - [ ] Add end-to-end testing framework
 - [ ] Tune monitoring and logging
+
 
 ## Completed
 
@@ -70,4 +72,5 @@
 - [x] Implement real-time chat messaging
 - [x] Implement real-time message display
 - [x] Add user search and conversation creation
-- [x] Add proper favicon
+- [x] Add favicon
+- [x] Add user online presence indicators
