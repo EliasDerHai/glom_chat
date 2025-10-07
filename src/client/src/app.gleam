@@ -8,10 +8,11 @@ import app_types.{
   UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
   UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
-import chat/shared_chat.{type ClientChatMessage, ChatMessage}
+import chat/shared_chat.{type ClientChatMessage}
 import chat/shared_chat_conversation.{
   type ChatConversationDto, ChatConversationDto,
 }
+import chat/shared_chat_creation_dto.{ChatMessageCreationDto}
 import conversation
 import endpoints
 import gleam/bool
@@ -428,21 +429,15 @@ fn send_message(model: Model) -> Effect(Msg) {
     Ok(conversation) -> conversation.draft_message_text
   }
 
-  let draft_message: shared_chat.ClientChatMessage =
-    // FIXME: not secure (could send as any other user by manipulating the sender) 
-    // this should be a minimal send-to - all derived data should be set by the server
-    ChatMessage(
-      id: todo as "this doesn't make sense ... we need a send-dto without all this crap",
-      sender: login_state.session.user_id,
+  let dto =
+    ChatMessageCreationDto(
       receiver: selected_conversation.id,
-      delivery: shared_chat.Sending,
-      sent_time: None,
       text_content: draft_text |> string.split("\n"),
     )
 
   endpoints.post_request(
     endpoints.chats(),
-    draft_message |> shared_chat.chat_message_to_json,
+    dto |> shared_chat_creation_dto.to_json,
     shared_chat.chat_message_decoder(),
     ApiChatMessageSendResponse,
   )

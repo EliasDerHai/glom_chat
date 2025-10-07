@@ -1,4 +1,4 @@
-import app/domain/session
+import app/domain/session.{type SessionEntity}
 import app/domain/user.{type UserId, UserId}
 import app/persist/pool.{type DbPool}
 import app/persist/sql.{
@@ -8,6 +8,7 @@ import app/registry.{type SocketRegistry}
 import app/util/query_result
 import chat/shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
 import chat/shared_chat_conversation
+import chat/shared_chat_creation_dto
 import chat/shared_chat_id.{type ClientChatId, ChatId}
 import gleam/dynamic/decode
 import gleam/http
@@ -52,28 +53,30 @@ fn message_from_rows(
   )
 }
 
-fn message_from_shared_message(
-  msg: ClientChatMessage,
-) -> Result(ServerChatMessage, Nil) {
-  use id <- result.try(msg.id |> from_shared_chat_id)
-  use sender <- result.try(msg.sender |> user.from_shared_user_id)
-  use receiver <- result.try(msg.receiver |> user.from_shared_user_id)
+// TODO: cleanup
 
-  ChatMessage(
-    id:,
-    sender:,
-    receiver:,
-    delivery: case msg.delivery {
-      shared_chat.Delivered -> sql.Delivered
-      shared_chat.Read -> sql.Read
-      shared_chat.Sent -> sql.Sent
-      _ -> sql.Sent
-    },
-    sent_time: msg.sent_time,
-    text_content: msg.text_content,
-  )
-  |> Ok
-}
+//fn message_from_shared_message(
+//  msg: ClientChatMessage,
+//) -> Result(ServerChatMessage, Nil) {
+//  use id <- result.try(msg.id |> from_shared_chat_id)
+//  use sender <- result.try(msg.sender |> user.from_shared_user_id)
+//  use receiver <- result.try(msg.receiver |> user.from_shared_user_id)
+//
+//  ChatMessage(
+//    id:,
+//    sender:,
+//    receiver:,
+//    delivery: case msg.delivery {
+//      shared_chat.Delivered -> sql.Delivered
+//      shared_chat.Read -> sql.Read
+//      shared_chat.Sent -> sql.Sent
+//      _ -> sql.Sent
+//    },
+//    sent_time: msg.sent_time,
+//    text_content: msg.text_content,
+//  )
+//  |> Ok
+//}
 
 fn to_shared_message(msg: ServerChatMessage) -> ClientChatMessage {
   ChatMessage(
@@ -90,11 +93,13 @@ fn to_shared_chat_id(chat_id: ChatId) -> ClientChatId {
   chat_id.v |> uuid.to_string |> shared_chat_id.ChatId
 }
 
-fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
-  chat_id.v
-  |> uuid.from_string
-  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
-}
+// TODO: cleanup
+
+//fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
+//  chat_id.v
+//  |> uuid.from_string
+//  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
+//}
 
 fn to_shared_chat_message_delivery(
   delivery: ChatMessageDelivery,
@@ -145,7 +150,7 @@ pub fn insert_chat_message(
 pub fn chat_conversations(
   req: Request,
   db: DbPool,
-  session: session.SessionEntity,
+  session: SessionEntity,
 ) -> Response {
   use <- wisp.require_method(req, http.Get)
 
@@ -182,6 +187,7 @@ pub fn post_chat_message(
   req: Request,
   db: DbPool,
   registry: SocketRegistry,
+  session: SessionEntity,
 ) -> Response {
   use <- wisp.require_method(req, http.Post)
   use json <- wisp.require_json(req)
@@ -189,13 +195,33 @@ pub fn post_chat_message(
   {
     use msg <- result.try(
       json
-      |> decode.run(shared_chat.chat_message_decoder())
+      |> decode.run(shared_chat_creation_dto.decoder())
       |> result.map_error(fn(_) {
         wisp.bad_request("can't decode chat_message")
       })
       |> result.map(fn(r) {
-        message_from_shared_message(r)
-        |> result.map_error(fn(_) { wisp.bad_request("can't decode user_ids") })
+        let shared_chat_creation_dto.ChatMessageCreationDto(
+          receiver:,
+          text_content:,
+        ) = r
+
+        use receiver <- result.try(
+          receiver
+          |> user.from_shared_user_id
+          |> result.map_error(fn(_) {
+            wisp.bad_request("can't decode receiver's user_id")
+          }),
+        )
+
+        ChatMessage(
+          id: shared_chat_id.ChatId(uuid.v7()),
+          receiver:,
+          sender: session.user_id,
+          delivery: sql.Sent,
+          sent_time: option.Some(timestamp.system_time()),
+          text_content:,
+        )
+        |> Ok
       })
       |> result.flatten,
     )
