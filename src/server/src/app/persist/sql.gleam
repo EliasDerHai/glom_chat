@@ -557,6 +557,51 @@ LIMIT $2;
   |> pog.execute(db)
 }
 
+/// A row you get from running the `update_chat_messages_delivery` query
+/// defined in `./src/app/persist/sql/update_chat_messages_delivery.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.4.1 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type UpdateChatMessagesDeliveryRow {
+  UpdateChatMessagesDeliveryRow(id: Uuid, sender_id: Uuid)
+}
+
+/// Runs the `update_chat_messages_delivery` query
+/// defined in `./src/app/persist/sql/update_chat_messages_delivery.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.4.1 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn update_chat_messages_delivery(
+  db: pog.Connection,
+  arg_1: ChatMessageDelivery,
+  arg_2: List(Uuid),
+  arg_3: Uuid,
+) -> Result(pog.Returned(UpdateChatMessagesDeliveryRow), pog.QueryError) {
+  let decoder = {
+    use id <- decode.field(0, uuid_decoder())
+    use sender_id <- decode.field(1, uuid_decoder())
+    decode.success(UpdateChatMessagesDeliveryRow(id:, sender_id:))
+  }
+
+  "UPDATE chat_messages
+SET delivery = $1 
+WHERE id = ANY($2) 
+	AND delivery != $1
+	AND receiver_id = $3
+RETURNING id, sender_id;
+"
+  |> pog.query
+  |> pog.parameter(chat_message_delivery_encoder(arg_1))
+  |> pog.parameter(
+    pog.array(fn(value) { pog.text(uuid.to_string(value)) }, arg_2),
+  )
+  |> pog.parameter(pog.text(uuid.to_string(arg_3)))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `update_user_email_verified` query
 /// defined in `./src/app/persist/sql/update_user_email_verified.sql`.
 ///

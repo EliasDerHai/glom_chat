@@ -8,7 +8,8 @@ import app_types.{
   UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
   UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
-import chat/shared_chat.{type ClientChatMessage}
+import chat/shared_chat.{type ClientChatMessage, ChatMessage}
+import chat/shared_chat_confirmation
 import chat/shared_chat_conversation.{
   type ChatConversationDto, ChatConversationDto,
 }
@@ -38,7 +39,7 @@ import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
 import socket_message/shared_client_to_server
 import socket_message/shared_server_to_client.{
-  IsTyping, NewMessage, OnlineHasChanged,
+  IsTyping, MessageConfirmation, NewMessage, OnlineHasChanged,
 }
 import util/time_util
 import util/toast
@@ -557,6 +558,37 @@ fn handle_socket_event(
               #(
                 Model(
                   LoggedIn(LoginState(..login_state, online:)),
+                  model.global_state,
+                ),
+                effect.none(),
+              )
+            }
+            MessageConfirmation(confirmation:) -> {
+              let assert LoggedIn(login_state) = model.app_state
+                as "must be logged in at this point"
+
+              let conversations =
+                login_state.conversations
+                |> dict.map_values(fn(_, conversation) {
+                  let messages =
+                    conversation.messages
+                    |> list.map(fn(msg) {
+                      case confirmation.message_ids |> list.contains(msg.id) {
+                        False -> msg
+                        True ->
+                          ChatMessage(
+                            ..msg,
+                            delivery: confirmation.confirm
+                              |> shared_chat_confirmation.to_delivery,
+                          )
+                      }
+                    })
+                  Conversation(..conversation, messages:)
+                })
+
+              #(
+                Model(
+                  LoggedIn(LoginState(..login_state, conversations:)),
                   model.global_state,
                 ),
                 effect.none(),

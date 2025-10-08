@@ -1,10 +1,12 @@
 import chat/shared_chat.{type ClientChatMessage}
-import gleam/dynamic/decode
+import chat/shared_chat_confirmation.{type ChatConfirmation}
+import gleam/dynamic/decode.{type Decoder}
 import gleam/json.{type Json}
 import shared_user.{type UserId, UserId}
 
 pub type ServerToClientSocketMessage {
   NewMessage(message: ClientChatMessage)
+  MessageConfirmation(confirmation: ChatConfirmation)
   IsTyping(user: UserId)
   OnlineHasChanged(online: List(UserId))
 }
@@ -14,40 +16,55 @@ pub fn to_json(socket_message: ServerToClientSocketMessage) -> Json {
     NewMessage(message:) ->
       json.object([
         #("type", json.string("new_message")),
-        #("message", message |> shared_chat.chat_message_to_json()),
+        #("message", message |> shared_chat.chat_message_to_json),
       ])
     IsTyping(user:) ->
       json.object([
         #("type", json.string("is_typing")),
-        #("user", user |> shared_user.user_id_to_json()),
+        #("user", user |> shared_user.user_id_to_json),
       ])
-    OnlineHasChanged(users) ->
+    OnlineHasChanged(online:) ->
       json.object([
         #("type", json.string("online_has_changed")),
-        #("online", users |> json.array(shared_user.user_id_to_json)),
+        #("online", online |> json.array(shared_user.user_id_to_json)),
+      ])
+    MessageConfirmation(confirmation:) ->
+      json.object([
+        #("type", json.string("message_confirmation")),
+        #(
+          "confirmation",
+          confirmation |> shared_chat_confirmation.chat_confirmation_to_json,
+        ),
       ])
   }
 }
 
-pub fn decoder() -> decode.Decoder(ServerToClientSocketMessage) {
+pub fn decoder() -> Decoder(ServerToClientSocketMessage) {
   use variant <- decode.field("type", decode.string)
 
   case variant {
     "new_message" -> {
       use message <- decode.field("message", shared_chat.chat_message_decoder())
-      decode.success(NewMessage(message:))
+      message |> NewMessage(message: _) |> decode.success
     }
     "is_typing" -> {
       use user <- decode.field("user", shared_user.user_id_decoder())
-      decode.success(IsTyping(user:))
+      user |> IsTyping(user: _) |> decode.success
     }
     "online_has_changed" -> {
       use online <- decode.field(
         "online",
         shared_user.user_id_decoder() |> decode.list,
       )
-      decode.success(OnlineHasChanged(online:))
+      online |> OnlineHasChanged(online: _) |> decode.success
     }
-    _ -> decode.failure(IsTyping(UserId("")), "SocketMessage")
+    "message_confirmation" -> {
+      use confirmation <- decode.field(
+        "confirmation",
+        shared_chat_confirmation.chat_confirmation_decoder(),
+      )
+      confirmation |> MessageConfirmation |> decode.success
+    }
+    _ -> decode.failure(IsTyping(UserId("")), "ServerToClientSocketMessage")
   }
 }

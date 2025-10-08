@@ -4,12 +4,14 @@ import app/persist/pool.{type DbPool}
 import app/persist/sql.{
   type ChatMessageDelivery, type SelectChatMessagesBySenderIdOrReceiverIdRow,
 }
-import app/registry.{type SocketRegistry}
+import app/registry.{type SocketRegistry, OnNotifyClient}
 import app/util/query_result
 import chat/shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
+import chat/shared_chat_confirmation.{ChatConfirmation}
 import chat/shared_chat_conversation
 import chat/shared_chat_creation_dto
 import chat/shared_chat_id.{type ClientChatId, ChatId}
+import gleam/dict
 import gleam/dynamic/decode
 import gleam/http
 import gleam/json
@@ -20,7 +22,7 @@ import gleam/set
 import gleam/time/calendar
 import gleam/time/timestamp
 import pog
-import socket_message/shared_server_to_client
+import socket_message/shared_server_to_client.{MessageConfirmation}
 import util/result_extension
 import wisp.{type Request, type Response}
 import youid/uuid
@@ -50,6 +52,17 @@ fn message_from_rows(
     sent_time: row.created_at,
     text_content: row.text_content,
   )
+}
+
+fn to_sql_delivery(
+  delivery: shared_chat.ChatMessageDelivery,
+) -> sql.ChatMessageDelivery {
+  case delivery {
+    shared_chat.Delivered -> sql.Delivered
+    shared_chat.Read -> sql.Read
+    shared_chat.Sent -> sql.Sent
+    shared_chat.Sending -> sql.Sent
+  }
 }
 
 // TODO: cleanup
@@ -92,13 +105,11 @@ fn to_shared_chat_id(chat_id: ChatId) -> ClientChatId {
   chat_id.v |> uuid.to_string |> shared_chat_id.ChatId
 }
 
-// TODO: cleanup
-
-//fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
-//  chat_id.v
-//  |> uuid.from_string
-//  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
-//}
+fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
+  chat_id.v
+  |> uuid.from_string
+  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
+}
 
 fn to_shared_chat_message_delivery(
   delivery: ChatMessageDelivery,
@@ -235,7 +246,7 @@ pub fn post_chat_message(
 
     actor.send(
       registry,
-      registry.OnNotifyClient(
+      OnNotifyClient(
         msg.receiver,
         shared_server_to_client.NewMessage(msg |> to_shared_message),
       ),
@@ -246,6 +257,70 @@ pub fn post_chat_message(
     |> shared_chat.chat_message_to_json
     |> json.to_string
     |> wisp.json_response(201)
+    |> Ok
+  }
+  |> result_extension.unwrap_both()
+}
+
+pub fn post_chat_confirmations(
+  req: Request,
+  db: DbPool,
+  registry: SocketRegistry,
+  session: SessionEntity,
+) -> Response {
+  use <- wisp.require_method(req, http.Post)
+  use json <- wisp.require_json(req)
+
+  {
+    use dto <- result.try(
+      json
+      |> decode.run(shared_chat_confirmation.chat_confirmation_decoder())
+      |> result.map_error(fn(_) {
+        wisp.bad_request("can't decode chat_message")
+      }),
+    )
+
+    let delivery =
+      dto.confirm
+      |> shared_chat_confirmation.to_delivery
+      |> to_sql_delivery
+
+    let message_ids =
+      dto.message_ids
+      |> list.filter_map(from_shared_chat_id)
+      |> list.map(fn(id) { id.v })
+
+    use r <- result.try(
+      db
+      |> pool.conn
+      |> sql.update_chat_messages_delivery(
+        delivery,
+        message_ids,
+        session.user_id.v,
+      )
+      |> query_result.map_query_result_expect_single_row,
+    )
+
+    r.rows
+    |> list.group(fn(row) { row.sender_id |> UserId })
+    |> dict.map_values(fn(_, rows) {
+      rows |> list.map(fn(row) { row.id |> ChatId |> to_shared_chat_id })
+    })
+    |> dict.each(fn(user_id, chat_ids) {
+      registry
+      |> actor.send(OnNotifyClient(
+        user_id,
+        MessageConfirmation(ChatConfirmation(chat_ids, dto.confirm)),
+      ))
+    })
+
+    wisp.ok()
+    |> wisp.json_body(
+      dto
+      // kind of dumb that we have to do a full serialization roundtrip just bc of the type 
+      |> shared_chat_confirmation.chat_confirmation_to_json
+      |> json.to_string,
+    )
     |> Ok
   }
   |> result_extension.unwrap_both()

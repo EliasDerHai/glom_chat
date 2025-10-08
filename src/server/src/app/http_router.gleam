@@ -101,6 +101,8 @@ fn validate_and_handle_api_requests(
     ["users", "search"] -> user.list_users(req, db)
     ["users", id] -> user.user(req, db, id)
     ["chats", "conversations"] -> chat.chat_conversations(req, db, session)
+    ["chats", "confirmations"] ->
+      chat.post_chat_confirmations(req, db, registry, session)
     ["chats"] -> chat.post_chat_message(req, db, registry, session)
 
     _ -> wisp.not_found()

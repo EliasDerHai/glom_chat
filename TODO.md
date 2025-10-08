@@ -7,7 +7,8 @@
 - [ ] Properly handle "message read/unread"
 - [ ] Add message history pagination
 - [ ] Add typing indicators
-- [ ] Add image posting
+- [ ] Add media attachments
+    - probably [Cloudflare R2](https://www.cloudflare.com/en-gb/developer-platform/products/r2/)
 - [ ] Add cache for sessions (no db-trip for every request)
 - [ ] Add chat room/conversation management
 - [ ] Add more friendlist (currently no "blocked", no "invisible users")
@@ -27,13 +28,12 @@
 ## Infrastructure
 
 - [ ] Deploy via gcp (burn 300$ free creds till christmas XD)
-- [ ] Eval if Neon suitable for long term pgo ([see discord thread](https://discord.com/channels/768594524158427167/1417525313591574528))
+- [ ] Eval if Neon suitable for long term pgo (see [discord thread](https://discord.com/channels/768594524158427167/1417525313591574528))
         - Db alternatives
             - Supabase
             - Prism
-- [ ] Add local integration tests
-- [ ] Add automated tests for API endpoints
-- [ ] Add end-to-end testing framework
+- [ ] Add integration tests
+- [ ] Add e2e tests
 - [ ] Tune monitoring and logging
 
 
