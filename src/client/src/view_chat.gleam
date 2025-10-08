@@ -12,7 +12,6 @@ import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set.{type Set}
-import gleam/string
 import lustre/attribute.{class}
 import lustre/element.{type Element}
 import lustre/element/html
@@ -282,6 +281,13 @@ fn view_chat_message(
 ) -> Element(Msg) {
   let self_is_sender = message.sender == self
 
+  let delivery_indicator = case message.delivery {
+    shared_chat.Delivered -> "✓"
+    shared_chat.Read -> "✓✓"
+    shared_chat.Sending -> "?"
+    shared_chat.Sent -> "..."
+  }
+
   let message_class = case self_is_sender {
     False -> "bg-gray-50 border-gray-200"
     True -> "bg-blue-50 border-blue-200"
@@ -295,28 +301,28 @@ fn view_chat_message(
           False -> other.v
         }),
       ]),
-      html.span(
-        [class("text-xs text-gray-500")],
+      html.div([class("text-xs text-gray-500 flex flex-col items-end gap-1")], [
         message.sent_time
           |> time_util.to_hhmm
           |> html.text
-          |> list_extension.of_one,
-      ),
+          |> list_extension.of_one
+          |> html.span([], _),
+        case self_is_sender {
+          True -> delivery_indicator
+          False -> ""
+        }
+          |> html.text
+          |> list_extension.of_one
+          |> html.span([], _),
+      ]),
     ]),
-    html.p(
-      [
-        class(
-          "text-sm "
-          <> case self_is_sender {
-            False -> ""
-            True -> "text-right"
-          },
-        ),
-      ],
-      [
-        html.text(string.join(message.text_content, " ")),
-      ],
-    ),
+    ..message.text_content
+    |> list.map(fn(line) {
+      line
+      |> html.text
+      |> list_extension.of_one
+      |> html.p([class("text-sm")], _)
+    })
   ])
 }
 
