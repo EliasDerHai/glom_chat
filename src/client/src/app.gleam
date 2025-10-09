@@ -1,6 +1,6 @@
 import app_types.{
-  type LoginState, type Model, type Msg, type NewConversationMsg,
-  ApiChatMessageConfirmationResponse,
+  type Conversation, type LoginState, type Model, type Msg,
+  type NewConversationMsg, type SocketState, ApiChatMessageConfirmationResponse,
   ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
   ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
   CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
@@ -10,7 +10,7 @@ import app_types.{
   UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
 import chat/shared_chat.{type ClientChatMessage, ChatMessage, Sent}
-import chat/shared_chat_confirmation.{ChatConfirmation}
+import chat/shared_chat_confirmation.{type ChatConfirmation, ChatConfirmation}
 import chat/shared_chat_conversation.{
   type ChatConversationDto, ChatConversationDto,
 }
@@ -18,7 +18,7 @@ import chat/shared_chat_creation_dto.{ChatMessageCreationDto}
 import conversation
 import endpoints
 import gleam/bool
-import gleam/dict
+import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/io
 import gleam/json
@@ -271,10 +271,12 @@ fn handle_chat_conversation_fetch_response(
   model: Model,
   dto: ChatConversationDto,
 ) -> #(Model, Effect(Msg)) {
+  let ChatConversationDto(messages, self, others) = dto
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
+  let assert Ok(conversation_partner) = others |> list.first
+    as "others must be non-empty"
 
-  let ChatConversationDto(messages, self, others) = dto
   let conversations =
     messages
     |> list.group(fn(item) {
@@ -314,7 +316,8 @@ fn handle_chat_conversation_fetch_response(
       model.global_state,
     )
 
-  let confirm_body =
+  let effects = [
+    // confirm 'delivered' of messages (based on all fetched messages)
     ChatConfirmation(
       messages
         |> list.filter_map(fn(m) {
@@ -325,10 +328,29 @@ fn handle_chat_conversation_fetch_response(
         }),
       shared_chat_confirmation.Delivered,
     )
+      |> send_chat_confirmation(login_state.web_socket),
+    // confirm 'read' of messages (based on selected conversation - which should be rendered subsequently)
+    confirm_read_messages_on_conversation_select(
+      conversations,
+      conversation_partner.id,
+      login_state.session.user_id,
+      login_state.web_socket,
+    ),
+  ]
+
+  #(model, effect.batch(effects))
+}
+
+fn send_chat_confirmation(
+  confirmation: ChatConfirmation,
+  socket_state: SocketState,
+) {
+  let confirm_body =
+    confirmation
     |> shared_client_to_server.MessageConfirmation
     |> shared_client_to_server.to_json
 
-  let effect = case login_state.web_socket {
+  case socket_state {
     Established(socket:) -> socket |> ws.send(confirm_body |> json.to_string)
     Pending(_) ->
       endpoints.post_request(
@@ -338,8 +360,6 @@ fn handle_chat_conversation_fetch_response(
         ApiChatMessageConfirmationResponse,
       )
   }
-
-  #(model, effect)
 }
 
 fn handle_new_conversation_msg(
@@ -436,7 +456,7 @@ fn handle_select(
       }
     })
 
-  #(
+  let model =
     Model(
       LoggedIn(
         LoginState(
@@ -447,10 +467,40 @@ fn handle_select(
         ),
       ),
       model.global_state,
-    ),
-    // TODO: send read confirmation
-    effect.none(),
-  )
+    )
+
+  let effect =
+    confirm_read_messages_on_conversation_select(
+      conversations,
+      dto.id,
+      login_state.session.user_id,
+      login_state.web_socket,
+    )
+
+  #(model, effect)
+}
+
+fn confirm_read_messages_on_conversation_select(
+  conversations: Dict(UserId, Conversation),
+  conversation_partner: UserId,
+  self: UserId,
+  socket_state: SocketState,
+) {
+  let unread_messages =
+    conversations
+    |> dict.get(conversation_partner)
+    |> result.map(fn(conv) { conv.messages })
+    |> result.unwrap([])
+    |> list.filter_map(fn(msg) {
+      let match = msg.receiver == self && msg.delivery != shared_chat.Read
+      case match {
+        False -> Error(Nil)
+        True -> Ok(msg.id)
+      }
+    })
+
+  ChatConfirmation(unread_messages, shared_chat_confirmation.Read)
+  |> send_chat_confirmation(socket_state)
 }
 
 fn send_message(model: Model) -> Effect(Msg) {
@@ -632,7 +682,7 @@ fn handle_socket_event(
 
 fn handle_message_confimation(
   model: Model,
-  confirmation: shared_chat_confirmation.ChatConfirmation,
+  confirmation: ChatConfirmation,
 ) -> #(Model, Effect(Msg)) {
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"

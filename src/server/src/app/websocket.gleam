@@ -175,7 +175,8 @@ fn handle_decoded_message(
           mist.send_text_frame(
             conn,
             confirmation
-              |> shared_chat_confirmation.chat_confirmation_to_json
+              |> MessageConfirmation
+              |> shared_client_to_server.to_json
               |> json.to_string,
           )
           |> consume_log_error

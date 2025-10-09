@@ -12,6 +12,7 @@ import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set.{type Set}
+import gleam/string
 import lustre/attribute.{class}
 import lustre/element.{type Element}
 import lustre/element/html
@@ -282,10 +283,10 @@ fn view_chat_message(
   let self_is_sender = message.sender == self
 
   let delivery_indicator = case message.delivery {
-    shared_chat.Delivered -> "✓"
-    shared_chat.Read -> "✓✓"
     shared_chat.Sending -> "?"
     shared_chat.Sent -> "..."
+    shared_chat.Delivered -> "✓"
+    shared_chat.Read -> "✓✓"
   }
 
   let message_class = case self_is_sender {
@@ -308,12 +309,16 @@ fn view_chat_message(
           |> list_extension.of_one
           |> html.span([], _),
         case self_is_sender {
-          True -> delivery_indicator
-          False -> ""
-        }
-          |> html.text
-          |> list_extension.of_one
-          |> html.span([], _),
+          True ->
+            delivery_indicator
+            |> html.text
+            |> list_extension.of_one
+            |> html.span(
+              [attribute.title(message.delivery |> string.inspect)],
+              _,
+            )
+          False -> html.text("")
+        },
       ]),
     ]),
     ..message.text_content
