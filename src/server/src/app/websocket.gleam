@@ -1,11 +1,14 @@
-import app/domain/session
+import app/domain/chat
+import app/domain/session.{type SessionEntity}
 import app/domain/user.{type UserId}
 import app/persist/pool.{type DbPool}
 import app/registry.{
-  type SocketRegistry, OnClientRegistered, OnClientUnregistered,
+  type RegistryMessage, type SocketRegistry, OnClientRegistered,
+  OnClientUnregistered,
 }
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
+import chat/shared_chat_confirmation
 import gleam/bit_array
 import gleam/erlang/process.{type Subject}
 import gleam/io
@@ -14,13 +17,19 @@ import gleam/option
 import gleam/otp/actor
 import gleam/string
 import mist.{type Next, type WebsocketConnection, type WebsocketMessage}
-import socket_message/shared_client_to_server
+import socket_message/shared_client_to_server.{
+  type ClientToServerSocketMessage, IsTyping, MessageConfirmation,
+}
 import socket_message/shared_server_to_client
 import wisp
 import youid/uuid
 
 pub type WsState {
-  WsState(user_id: UserId, outbox: Subject(registry.ServerSideSocketOp))
+  WsState(
+    user_id: UserId,
+    session: SessionEntity,
+    outbox: Subject(registry.ServerSideSocketOp),
+  )
 }
 
 pub fn handle_ws_request(
@@ -50,7 +59,7 @@ pub fn handle_ws_request(
         actor.send(registry, OnClientRegistered(session.user_id, handle))
 
         // Store the user_id in this connection's state
-        let state = WsState(session.user_id, handle)
+        let state = WsState(session.user_id, session, handle)
 
         let sel =
           process.new_selector()
@@ -79,7 +88,7 @@ fn handle_ws_message(
 ) -> Next(WsState, conn) {
   case message {
     mist.Text(text) -> {
-      handle_text_messages(text, conn, db, registry)
+      handle_text_messages(state, text, conn, db, registry)
       mist.continue(state)
     }
     mist.Binary(_) -> mist.continue(state)
@@ -115,42 +124,71 @@ fn handle_ws_message(
 }
 
 fn handle_text_messages(
+  state: WsState,
   raw: String,
   conn: WebsocketConnection,
-  _db: DbPool,
+  db: DbPool,
   registry: SocketRegistry,
 ) -> Nil {
-  let r = case raw {
-    "ping" -> mist.send_text_frame(conn, "pong")
-    "echo" <> tail -> mist.send_text_frame(conn, "echo " <> tail |> string.trim)
+  case raw {
+    "ping" -> mist.send_text_frame(conn, "pong") |> consume_log_error
+    "echo" <> tail ->
+      mist.send_text_frame(conn, "echo " <> tail |> string.trim)
+      |> consume_log_error
     _ -> {
-      let decoder = shared_client_to_server.decoder()
-      case raw |> json.parse(decoder) {
-        Ok(shared_client_to_server.IsTyping(typer, receiver)) -> {
-          let assert Ok(to_be_notified) = receiver |> user.from_shared_user_id
-            as { "can't notify '" <> receiver.v <> "' - not a UUID" }
-
-          actor.send(
-            registry,
-            registry.OnNotifyClient(
-              to_be_notified,
-              shared_server_to_client.IsTyping(typer),
-            ),
-          )
-        }
+      case json.parse(raw, shared_client_to_server.decoder()) {
         Error(e) ->
           wisp.log_error(
             "could not decode client's socket message: " <> e |> string.inspect,
           )
+        Ok(decoded) ->
+          handle_decoded_message(state, conn, db, registry, decoded)
       }
-      Ok(Nil)
     }
   }
+}
 
+fn handle_decoded_message(
+  state: WsState,
+  conn: WebsocketConnection,
+  db: DbPool,
+  registry: Subject(RegistryMessage),
+  decoded: ClientToServerSocketMessage,
+) -> Nil {
+  case decoded {
+    IsTyping(typer, receiver) -> {
+      let assert Ok(to_be_notified) = receiver |> user.from_shared_user_id
+        as { "can't notify '" <> receiver.v <> "' - not a UUID" }
+
+      actor.send(
+        registry,
+        registry.OnNotifyClient(
+          to_be_notified,
+          shared_server_to_client.IsTyping(typer),
+        ),
+      )
+    }
+
+    MessageConfirmation(confirmation:) ->
+      case chat.confirm_messages(db, confirmation, registry, state.session) {
+        Ok(confirmation) ->
+          mist.send_text_frame(
+            conn,
+            confirmation
+              |> shared_chat_confirmation.chat_confirmation_to_json
+              |> json.to_string,
+          )
+          |> consume_log_error
+        e -> e |> consume_log_error
+      }
+  }
+}
+
+fn consume_log_error(r: Result(a, e)) -> Nil {
   case r {
     Error(error_reason) ->
       { "Error sending websocket frame: " <> error_reason |> string.inspect }
       |> io.println_error
-    Ok(Nil) -> Nil
+    Ok(_) -> Nil
   }
 }

@@ -1,4 +1,5 @@
 import chat/shared_chat.{type ClientChatMessage}
+import chat/shared_chat_confirmation.{type ChatConfirmation}
 import chat/shared_chat_conversation.{type ChatConversationDto}
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
@@ -57,7 +58,7 @@ pub type NewConversation {
 
 pub type SocketState {
   Pending(since: Timestamp)
-  Established(WebSocket)
+  Established(socket: WebSocket)
 }
 
 // MESSAGE ----------------------------------------------------------------------
@@ -76,6 +77,7 @@ pub type Msg {
   UserOnSendSubmit
   ApiChatMessageFetchResponse(Result(ChatConversationDto, Error))
   ApiChatMessageSendResponse(Result(ClientChatMessage, Error))
+  ApiChatMessageConfirmationResponse(Result(ChatConfirmation, Error))
 }
 
 pub type NewConversationMsg {

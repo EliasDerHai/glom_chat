@@ -1,5 +1,6 @@
 import app_types.{
   type LoginState, type Model, type Msg, type NewConversationMsg,
+  ApiChatMessageConfirmationResponse,
   ApiChatMessageFetchResponse as ApiChatConversationsFetchResponse,
   ApiChatMessageSendResponse, ApiOnLogoutResponse, ApiSearchResponse,
   CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
@@ -8,8 +9,8 @@ import app_types.{
   UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
   UserOnSendSubmit, UserSearchInputChange, WsWrapper,
 }
-import chat/shared_chat.{type ClientChatMessage, ChatMessage}
-import chat/shared_chat_confirmation
+import chat/shared_chat.{type ClientChatMessage, ChatMessage, Sent}
+import chat/shared_chat_confirmation.{ChatConfirmation}
 import chat/shared_chat_conversation.{
   type ChatConversationDto, ChatConversationDto,
 }
@@ -177,6 +178,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Ok(dto) -> handle_chat_conversation_fetch_response(model, dto)
       }
     }
+    ApiChatMessageConfirmationResponse(r) ->
+      case r {
+        Error(_) -> noop
+        Ok(confirmation) -> handle_message_confimation(model, confirmation)
+      }
   }
 }
 
@@ -265,6 +271,9 @@ fn handle_chat_conversation_fetch_response(
   model: Model,
   dto: ChatConversationDto,
 ) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+
   let ChatConversationDto(messages, self, others) = dto
   let conversations =
     messages
@@ -297,13 +306,40 @@ fn handle_chat_conversation_fetch_response(
       dto
     })
 
-  let app_state = case model.app_state {
-    LoggedIn(l) ->
-      LoggedIn(LoginState(..l, selected_conversation:, conversations:))
-    PreLogin -> model.app_state
+  let model =
+    Model(
+      LoggedIn(
+        LoginState(..login_state, selected_conversation:, conversations:),
+      ),
+      model.global_state,
+    )
+
+  let confirm_body =
+    ChatConfirmation(
+      messages
+        |> list.filter_map(fn(m) {
+          case m.delivery == Sent {
+            False -> Error(Nil)
+            True -> Ok(m.id)
+          }
+        }),
+      shared_chat_confirmation.Delivered,
+    )
+    |> shared_client_to_server.MessageConfirmation
+    |> shared_client_to_server.to_json
+
+  let effect = case login_state.web_socket {
+    Established(socket:) -> socket |> ws.send(confirm_body |> json.to_string)
+    Pending(_) ->
+      endpoints.post_request(
+        endpoints.chat_confirmation(),
+        confirm_body,
+        shared_chat_confirmation.chat_confirmation_decoder(),
+        ApiChatMessageConfirmationResponse,
+      )
   }
 
-  #(Model(app_state, model.global_state), effect.none())
+  #(model, effect)
 }
 
 fn handle_new_conversation_msg(
@@ -563,37 +599,9 @@ fn handle_socket_event(
                 effect.none(),
               )
             }
-            MessageConfirmation(confirmation:) -> {
-              let assert LoggedIn(login_state) = model.app_state
-                as "must be logged in at this point"
 
-              let conversations =
-                login_state.conversations
-                |> dict.map_values(fn(_, conversation) {
-                  let messages =
-                    conversation.messages
-                    |> list.map(fn(msg) {
-                      case confirmation.message_ids |> list.contains(msg.id) {
-                        False -> msg
-                        True ->
-                          ChatMessage(
-                            ..msg,
-                            delivery: confirmation.confirm
-                              |> shared_chat_confirmation.to_delivery,
-                          )
-                      }
-                    })
-                  Conversation(..conversation, messages:)
-                })
-
-              #(
-                Model(
-                  LoggedIn(LoginState(..login_state, conversations:)),
-                  model.global_state,
-                ),
-                effect.none(),
-              )
-            }
+            MessageConfirmation(confirmation:) ->
+              handle_message_confimation(model, confirmation)
           }
         }
       }
@@ -620,6 +628,41 @@ fn handle_socket_event(
       }
     }
   }
+}
+
+fn handle_message_confimation(
+  model: Model,
+  confirmation: shared_chat_confirmation.ChatConfirmation,
+) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+
+  let conversations =
+    login_state.conversations
+    |> dict.map_values(fn(_, conversation) {
+      let messages =
+        conversation.messages
+        |> list.map(fn(msg) {
+          case confirmation.message_ids |> list.contains(msg.id) {
+            False -> msg
+            True ->
+              ChatMessage(
+                ..msg,
+                delivery: confirmation.confirm
+                  |> shared_chat_confirmation.to_delivery,
+              )
+          }
+        })
+      Conversation(..conversation, messages:)
+    })
+
+  #(
+    Model(
+      LoggedIn(LoginState(..login_state, conversations:)),
+      model.global_state,
+    ),
+    effect.none(),
+  )
 }
 
 // VIEW ------------------------------------------------------------------------

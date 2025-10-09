@@ -53,8 +53,8 @@ pub fn conversations() {
   "chats/conversations" |> to_req
 }
 
-pub fn conversation_mark_read() {
-  "chats/conversations/read" |> to_req
+pub fn chat_confirmation() {
+  "chats/confirmations" |> to_req
 }
 
 pub fn socket_address() {

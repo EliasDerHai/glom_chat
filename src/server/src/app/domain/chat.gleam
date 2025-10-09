@@ -7,7 +7,7 @@ import app/persist/sql.{
 import app/registry.{type SocketRegistry, OnNotifyClient}
 import app/util/query_result
 import chat/shared_chat.{type ChatMessage, type ClientChatMessage, ChatMessage}
-import chat/shared_chat_confirmation.{ChatConfirmation}
+import chat/shared_chat_confirmation.{type ChatConfirmation, ChatConfirmation}
 import chat/shared_chat_conversation
 import chat/shared_chat_creation_dto
 import chat/shared_chat_id.{type ClientChatId, ChatId}
@@ -21,7 +21,7 @@ import gleam/result
 import gleam/set
 import gleam/time/calendar
 import gleam/time/timestamp
-import pog
+import pog.{type QueryError}
 import socket_message/shared_server_to_client.{MessageConfirmation}
 import util/result_extension
 import wisp.{type Request, type Response}
@@ -128,7 +128,7 @@ fn to_shared_chat_message_delivery(
 pub fn get_chat_messages_for_user(
   db: DbPool,
   user_id: UserId,
-) -> Result(List(ServerChatMessage), pog.QueryError) {
+) -> Result(List(ServerChatMessage), QueryError) {
   db
   |> pool.conn()
   |> sql.select_chat_messages_by_sender_id_or_receiver_id(user_id.v)
@@ -140,7 +140,7 @@ pub fn get_chat_messages_for_user(
 pub fn insert_chat_message(
   db: DbPool,
   msg: ServerChatMessage,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
+) -> Result(pog.Returned(Nil), QueryError) {
   db
   |> pool.conn
   |> sql.insert_chat_message(
@@ -280,39 +280,10 @@ pub fn post_chat_confirmations(
       }),
     )
 
-    let delivery =
-      dto.confirm
-      |> shared_chat_confirmation.to_delivery
-      |> to_sql_delivery
-
-    let message_ids =
-      dto.message_ids
-      |> list.filter_map(from_shared_chat_id)
-      |> list.map(fn(id) { id.v })
-
-    use r <- result.try(
-      db
-      |> pool.conn
-      |> sql.update_chat_messages_delivery(
-        delivery,
-        message_ids,
-        session.user_id.v,
-      )
-      |> query_result.map_query_result_expect_single_row,
+    use _ <- result.try(
+      confirm_messages(db, dto, registry, session)
+      |> query_result.map_query_result,
     )
-
-    r.rows
-    |> list.group(fn(row) { row.sender_id |> UserId })
-    |> dict.map_values(fn(_, rows) {
-      rows |> list.map(fn(row) { row.id |> ChatId |> to_shared_chat_id })
-    })
-    |> dict.each(fn(user_id, chat_ids) {
-      registry
-      |> actor.send(OnNotifyClient(
-        user_id,
-        MessageConfirmation(ChatConfirmation(chat_ids, dto.confirm)),
-      ))
-    })
 
     wisp.ok()
     |> wisp.json_body(
@@ -324,4 +295,46 @@ pub fn post_chat_confirmations(
     |> Ok
   }
   |> result_extension.unwrap_both()
+}
+
+pub fn confirm_messages(
+  db: DbPool,
+  dto: ChatConfirmation,
+  registry: SocketRegistry,
+  session: SessionEntity,
+) -> Result(ChatConfirmation, QueryError) {
+  let delivery =
+    dto.confirm
+    |> shared_chat_confirmation.to_delivery
+    |> to_sql_delivery
+
+  let message_ids =
+    dto.message_ids
+    |> list.filter_map(from_shared_chat_id)
+    |> list.map(fn(id) { id.v })
+
+  use r <- result.try(
+    db
+    |> pool.conn
+    |> sql.update_chat_messages_delivery(
+      delivery,
+      message_ids,
+      session.user_id.v,
+    ),
+  )
+
+  r.rows
+  |> list.group(fn(row) { row.sender_id |> UserId })
+  |> dict.map_values(fn(_, rows) {
+    rows |> list.map(fn(row) { row.id |> ChatId |> to_shared_chat_id })
+  })
+  |> dict.each(fn(user_id, chat_ids) {
+    registry
+    |> actor.send(OnNotifyClient(
+      user_id,
+      MessageConfirmation(ChatConfirmation(chat_ids, dto.confirm)),
+    ))
+  })
+
+  Ok(dto)
 }

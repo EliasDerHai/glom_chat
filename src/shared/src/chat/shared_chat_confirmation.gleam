@@ -37,6 +37,7 @@ pub fn to_delivery(confirmation: ConfirmationKind) -> ChatMessageDelivery {
 
 // ChatConfirmation --------------------------------------------------
 
+// TODO: rename to MessageConfirmation
 pub type ChatConfirmation {
   ChatConfirmation(message_ids: List(ClientChatId), confirm: ConfirmationKind)
 }

@@ -1,6 +1,6 @@
 import gleam/result
 import gleam/string
-import pog.{type QueryError}
+import pog.{type QueryError, type Returned}
 import wisp.{type Response}
 
 pub fn map_query_result(r: Result(ok, QueryError)) -> Result(ok, Response) {
@@ -14,8 +14,8 @@ fn map_err(query_error: QueryError) {
 }
 
 pub fn map_query_result_expect_single_row(
-  r: Result(pog.Returned(a), QueryError),
-) -> Result(pog.Returned(a), Response) {
+  r: Result(Returned(a), QueryError),
+) -> Result(Returned(a), Response) {
   r
   |> map_query_result
   |> result.map(fn(ok) {
