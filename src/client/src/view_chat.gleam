@@ -304,6 +304,7 @@ fn view_chat_message(
       ]),
       html.div([class("text-xs text-gray-500 flex flex-col items-end gap-1")], [
         message.sent_time
+          // TODO: convert UTC to localtime
           |> time_util.to_hhmm
           |> html.text
           |> list_extension.of_one

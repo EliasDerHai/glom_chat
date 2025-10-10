@@ -25,7 +25,7 @@ pub fn millis_now() -> Int {
 }
 
 pub fn to_hhmm(t: Timestamp) -> String {
-  let #(_date, time_of_day) = timestamp.to_calendar(t, calendar.utc_offset)
+  let #(_date, time_of_day) = timestamp.to_calendar(t, calendar.local_offset())
   let hours = int.to_string(time_of_day.hours) |> string.pad_start(2, "0")
   let minutes = int.to_string(time_of_day.minutes) |> string.pad_start(2, "0")
   hours <> ":" <> minutes

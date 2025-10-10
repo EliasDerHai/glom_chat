@@ -8,7 +8,6 @@ import app/registry.{
 }
 import app/util/cookie
 import app/util/mist_request.{type MistRequest}
-import chat/shared_chat_confirmation
 import gleam/bit_array
 import gleam/erlang/process.{type Subject}
 import gleam/io

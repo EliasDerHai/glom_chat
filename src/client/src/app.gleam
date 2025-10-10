@@ -344,7 +344,9 @@ fn handle_chat_conversation_fetch_response(
 fn send_chat_confirmation(
   confirmation: ChatConfirmation,
   socket_state: SocketState,
-) {
+) -> Effect(Msg) {
+  use <- bool.guard(confirmation.message_ids |> list.is_empty, effect.none())
+
   let confirm_body =
     confirmation
     |> shared_client_to_server.MessageConfirmation

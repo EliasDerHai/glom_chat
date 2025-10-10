@@ -19,7 +19,6 @@ import gleam/list
 import gleam/otp/actor
 import gleam/result
 import gleam/set
-import gleam/time/calendar
 import gleam/time/timestamp
 import pog.{type QueryError}
 import socket_message/shared_server_to_client.{MessageConfirmation}
@@ -125,7 +124,7 @@ fn to_shared_chat_message_delivery(
 // Queries
 // ################################################################################
 
-pub fn get_chat_messages_for_user(
+fn get_chat_messages_for_user(
   db: DbPool,
   user_id: UserId,
 ) -> Result(List(ServerChatMessage), QueryError) {
@@ -137,7 +136,7 @@ pub fn get_chat_messages_for_user(
   })
 }
 
-pub fn insert_chat_message(
+fn insert_chat_message(
   db: DbPool,
   msg: ServerChatMessage,
 ) -> Result(pog.Returned(Nil), QueryError) {
@@ -223,15 +222,12 @@ pub fn post_chat_message(
           }),
         )
 
-        let local_now =
-          timestamp.system_time() |> timestamp.add(calendar.local_offset())
-
         ChatMessage(
           id: shared_chat_id.ChatId(uuid.v7()),
           receiver:,
           sender: session.user_id,
           delivery: sql.Sent,
-          sent_time: local_now,
+          sent_time: timestamp.system_time(),
           text_content:,
         )
         |> Ok

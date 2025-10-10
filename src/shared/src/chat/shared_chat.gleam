@@ -1,5 +1,5 @@
 import chat/shared_chat_id.{type ClientChatId, ChatId}
-import gleam/dynamic/decode
+import gleam/dynamic/decode.{type Decoder}
 import gleam/float
 import gleam/json.{type Json}
 import gleam/time/timestamp.{type Timestamp}
@@ -45,7 +45,7 @@ fn chat_message_delivery_to_json(
   }
 }
 
-fn chat_message_delivery_decoder() -> decode.Decoder(ChatMessageDelivery) {
+fn chat_message_delivery_decoder() -> Decoder(ChatMessageDelivery) {
   use variant <- decode.then(decode.string)
   case variant {
     "sending" -> decode.success(Sending)
@@ -75,7 +75,7 @@ pub fn chat_message_to_json(chat_message: ClientChatMessage) -> Json {
   ])
 }
 
-pub fn chat_message_decoder() -> decode.Decoder(ClientChatMessage) {
+pub fn chat_message_decoder() -> Decoder(ClientChatMessage) {
   use id <- decode.field("id", decode.string)
   use sender <- decode.field("sender", decode.string)
   use receiver <- decode.field("receiver", decode.string)
