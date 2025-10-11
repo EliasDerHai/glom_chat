@@ -101,13 +101,13 @@ fn to_shared_message(msg: ServerChatMessage) -> ClientChatMessage {
 }
 
 fn to_shared_chat_id(chat_id: ChatId) -> ClientChatId {
-  chat_id.v |> uuid.to_string |> shared_chat_id.ChatId
+  chat_id.v |> uuid.to_string |> ChatId
 }
 
 fn from_shared_chat_id(chat_id: ClientChatId) -> Result(ChatId, Nil) {
   chat_id.v
   |> uuid.from_string
-  |> result.map(fn(id) { id |> shared_chat_id.ChatId })
+  |> result.map(fn(id) { id |> ChatId })
 }
 
 fn to_shared_chat_message_delivery(
@@ -143,7 +143,7 @@ fn insert_chat_message(
   db
   |> pool.conn
   |> sql.insert_chat_message(
-    uuid.v7(),
+    msg.id.v,
     msg.sender.v,
     msg.receiver.v,
     msg.delivery,
@@ -223,7 +223,7 @@ pub fn post_chat_message(
         )
 
         ChatMessage(
-          id: shared_chat_id.ChatId(uuid.v7()),
+          id: ChatId(uuid.v7()),
           receiver:,
           sender: session.user_id,
           delivery: sql.Sent,
@@ -312,12 +312,19 @@ pub fn confirm_messages(
   use r <- result.try(
     db
     |> pool.conn
+    // NOTE: SQL contains 'state-machine' preventing overwrite of later state with earlier state
+    // (eg. READ -> DELIVERED not possible) - this prevents potential race conditions between requests
     |> sql.update_chat_messages_delivery(
       delivery,
       message_ids,
       session.user_id.v,
     ),
   )
+
+  case r.count {
+    0 -> wisp.log_warning("unexpected noop in confirm_messages")
+    _ -> Nil
+  }
 
   r.rows
   |> list.group(fn(row) { row.sender_id |> UserId })

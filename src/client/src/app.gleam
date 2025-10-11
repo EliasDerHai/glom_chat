@@ -244,29 +244,33 @@ fn fetch_conversations() -> Effect(Msg) {
 }
 
 fn handle_api_chat_message_send_response(model: Model, msg: ClientChatMessage) {
-  let app_state = case model.app_state {
-    LoggedIn(l) -> {
-      let conversations =
-        l.conversations
-        |> dict.upsert(msg.receiver, fn(curr) {
-          let assert Some(conversation) = curr
-            as { "Can't find conversation " <> msg.receiver.v }
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
 
-          Conversation(
-            list.append(conversation.messages, [msg]),
-            conversation.conversation_partner,
-            "",
-          )
-        })
+  let conversations =
+    login_state.conversations
+    |> dict.upsert(msg.receiver, fn(curr) {
+      // must exist otherwise send action not possible
+      let assert Some(conversation) = curr
 
-      LoggedIn(LoginState(..l, conversations:))
-    }
-    PreLogin -> model.app_state
-  }
+      Conversation(
+        list.append(conversation.messages, [msg]),
+        conversation.conversation_partner,
+        "",
+      )
+    })
 
-  #(Model(app_state, model.global_state), fetch_conversations())
+  let model =
+    Model(
+      LoggedIn(LoginState(..login_state, conversations:)),
+      model.global_state,
+    )
+
+  #(model, effect.none())
 }
 
+// loads **all** conversations incl. all messages (so full 'state')
+// should be called on-load and from then on socket based deltas
 fn handle_chat_conversation_fetch_response(
   model: Model,
   dto: ChatConversationDto,
@@ -274,8 +278,6 @@ fn handle_chat_conversation_fetch_response(
   let ChatConversationDto(messages, self, others) = dto
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
-  let assert Ok(conversation_partner) = others |> list.first
-    as "others must be non-empty"
 
   let conversations =
     messages
@@ -316,12 +318,15 @@ fn handle_chat_conversation_fetch_response(
       model.global_state,
     )
 
+  // NOTE: it's possible that one message, that any message might be in both effects/confirmations
+  // this is fine because the state-machine doesn't allow READ -> DELIVERED - so we can just ignore 
+  // this edge-case
   let effects = [
     // confirm 'delivered' of messages (based on all fetched messages)
     ChatConfirmation(
       messages
         |> list.filter_map(fn(m) {
-          case m.delivery == Sent {
+          case m.delivery == Sent && m.receiver == login_state.session.user_id {
             False -> Error(Nil)
             True -> Ok(m.id)
           }
@@ -329,18 +334,23 @@ fn handle_chat_conversation_fetch_response(
       shared_chat_confirmation.Delivered,
     )
       |> send_chat_confirmation(login_state.web_socket),
-    // confirm 'read' of messages (based on selected conversation - which should be rendered subsequently)
-    confirm_read_messages_on_conversation_select(
-      conversations,
-      conversation_partner.id,
-      login_state.session.user_id,
-      login_state.web_socket,
-    ),
+    case selected_conversation {
+      None -> effect.none()
+      Some(selected_conversation) ->
+        // confirm 'read' of messages (based on selected conversation - which is about to be rendered)
+        confirm_read_messages_on_conversation_select(
+          conversations,
+          selected_conversation.id,
+          login_state.session.user_id,
+          login_state.web_socket,
+        )
+    },
   ]
 
   #(model, effect.batch(effects))
 }
 
+// tries socket but falls back to http if not available
 fn send_chat_confirmation(
   confirmation: ChatConfirmation,
   socket_state: SocketState,
@@ -351,6 +361,8 @@ fn send_chat_confirmation(
     confirmation
     |> shared_client_to_server.MessageConfirmation
     |> shared_client_to_server.to_json
+
+  io.println("confirming msg: " <> confirm_body |> json.to_string)
 
   case socket_state {
     Established(socket:) -> socket |> ws.send(confirm_body |> json.to_string)
@@ -569,7 +581,7 @@ fn handle_socket_event(
     }
     ws.OnBinaryMessage(_) -> panic as "received unexpected binary message"
     ws.OnTextMessage(message) -> {
-      io.println("Received WebSocket message: " <> message)
+      // io.println("Received WebSocket message: " <> message)
 
       let parsed_message =
         json.parse(message, shared_server_to_client.decoder())
@@ -607,37 +619,6 @@ fn handle_socket_event(
               )
             }
 
-            NewMessage(message:) -> {
-              let assert LoggedIn(login_state) = model.app_state
-                as "must be logged in at this point"
-
-              case login_state.conversations |> dict.get(message.sender) {
-                // TODO: conversations |> dict.insert(message.sender, todo) <- we could avoid the http if we knew the username
-                Error(_) -> #(model, fetch_conversations())
-                Ok(_) -> {
-                  let conversations =
-                    login_state.conversations
-                    |> dict.upsert(message.sender, fn(existing) {
-                      let assert Some(conversation) = existing
-                        as "already checked"
-                      Conversation(
-                        conversation.messages |> list.append([message]),
-                        conversation.conversation_partner,
-                        conversation.draft_message_text,
-                      )
-                    })
-
-                  #(
-                    Model(
-                      LoggedIn(LoginState(..login_state, conversations:)),
-                      model.global_state,
-                    ),
-                    effect.none(),
-                  )
-                }
-              }
-            }
-
             OnlineHasChanged(online:) -> {
               let assert LoggedIn(login_state) = model.app_state
                 as "must be logged in at this point"
@@ -651,6 +632,8 @@ fn handle_socket_event(
                 effect.none(),
               )
             }
+
+            NewMessage(message:) -> handle_message_received(model, message)
 
             MessageConfirmation(confirmation:) ->
               handle_message_confimation(model, confirmation)
@@ -678,6 +661,50 @@ fn handle_socket_event(
         }
         _ -> #(model, effect.none())
       }
+    }
+  }
+}
+
+fn handle_message_received(
+  model: Model,
+  message: ClientChatMessage,
+) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+
+  case login_state.conversations |> dict.get(message.sender) {
+    // TODO: conversations |> dict.insert(message.sender, todo) <- we could avoid the http if we knew the username
+    Error(_) -> #(model, fetch_conversations())
+    Ok(_) -> {
+      let conversations =
+        login_state.conversations
+        |> dict.upsert(message.sender, fn(existing) {
+          let assert Some(conversation) = existing as "already checked"
+          Conversation(
+            conversation.messages |> list.append([message]),
+            conversation.conversation_partner,
+            conversation.draft_message_text,
+          )
+        })
+
+      let model =
+        Model(
+          LoggedIn(LoginState(..login_state, conversations:)),
+          model.global_state,
+        )
+
+      let effect =
+        case login_state.selected_conversation {
+          // current chat is selected -> immediately confirm as 'read'
+          option.Some(dto) if dto.id == message.sender ->
+            shared_chat_confirmation.Read
+          // otherwise confirm as 'delivered'
+          _ -> shared_chat_confirmation.Delivered
+        }
+        |> ChatConfirmation([message.id], _)
+        |> send_chat_confirmation(login_state.web_socket)
+
+      #(model, effect)
     }
   }
 }

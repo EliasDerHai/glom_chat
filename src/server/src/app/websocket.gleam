@@ -149,7 +149,7 @@ fn handle_text_messages(
 
 fn handle_decoded_message(
   state: WsState,
-  conn: WebsocketConnection,
+  _conn: WebsocketConnection,
   db: DbPool,
   registry: Subject(RegistryMessage),
   decoded: ClientToServerSocketMessage,
@@ -169,18 +169,9 @@ fn handle_decoded_message(
     }
 
     MessageConfirmation(confirmation:) ->
-      case chat.confirm_messages(db, confirmation, registry, state.session) {
-        Ok(confirmation) ->
-          mist.send_text_frame(
-            conn,
-            confirmation
-              |> MessageConfirmation
-              |> shared_client_to_server.to_json
-              |> json.to_string,
-          )
-          |> consume_log_error
-        e -> e |> consume_log_error
-      }
+      db
+      |> chat.confirm_messages(confirmation, registry, state.session)
+      |> consume_log_error
   }
 }
 
