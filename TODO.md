@@ -12,8 +12,8 @@
 - [ ] Add cache for sessions (no db-trip for every request)
 
 ### UI
-- [ ] Add accessibility improvements (keyboard navigation)
 - [ ] Make Sidebar width draggable
+- [ ] Add accessibility improvements (enter on signup/login form)
 
 ### Security & Auth
 - [ ] Add rate limiting
@@ -29,6 +29,7 @@
             - Supabase
             - Prism
 - [ ] Add integration tests
+- [ ] Add stress tests
 - [ ] Add e2e tests
 - [ ] Tune monitoring and logging
 
@@ -115,3 +116,4 @@ src/
 - [x] Show unread message badge
 - [x] Add typing indicators
 - [x] Properly handle "message read/unread"
+- [x] Add accessibility improvements (keyboard navigation)

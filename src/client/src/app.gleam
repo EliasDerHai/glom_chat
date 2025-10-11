@@ -6,8 +6,8 @@ import app_types.{
   CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
   LoginState, LoginSuccess, Model, NewConversation, NewConversationMsg, Pending,
   PreLogin, RemoveToast, ShowToast, UserConversationPartnerSelect,
-  UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
-  UserOnSendSubmit, UserSearchInputChange, WsWrapper,
+  UserModalClose, UserModalOpen, UserOnDraftTextChange, UserOnLogoutClick,
+  UserOnSendSubmit, UserOnTyping, UserSearchInputChange, WsWrapper,
 }
 import chat/shared_chat.{type ClientChatMessage, ChatMessage, Sent}
 import chat/shared_chat_confirmation.{type ChatConfirmation, ChatConfirmation}
@@ -157,8 +157,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### CHAT ###
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
-    UserOnMessageChange(text) ->
-      update_draft_message_and_notify_typing(model, text)
+    UserOnDraftTextChange(text) -> update_draft_message(model, text)
+    UserOnTyping -> notify_typing(model)
     UserOnSendSubmit -> #(model, send_message(model))
     ApiChatMessageSendResponse(r) ->
       case r {
@@ -201,7 +201,7 @@ fn remove_is_typing(model: Model, id: Int) -> #(Model, Effect(Msg)) {
   #(model, effect.none())
 }
 
-fn update_draft_message_and_notify_typing(
+fn update_draft_message(
   model: Model,
   text: String,
 ) -> #(Model, Effect(Msg)) {
@@ -221,6 +221,15 @@ fn update_draft_message_and_notify_typing(
 
   let login_state = LoginState(..login_state, conversations:)
 
+  #(Model(LoggedIn(login_state), model.global_state), effect.none())
+}
+
+fn notify_typing(model: Model) -> #(Model, Effect(Msg)) {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+  let assert Some(selected_conversation) = login_state.selected_conversation
+    as "conversation must be selected at this point"
+
   let effect = case login_state.web_socket {
     Established(socket) -> {
       let typer = login_state.session.user_id
@@ -233,7 +242,7 @@ fn update_draft_message_and_notify_typing(
     Pending(_) -> effect.none()
   }
 
-  #(Model(LoggedIn(login_state), model.global_state), effect)
+  #(model, effect)
 }
 
 fn fetch_conversations() -> Effect(Msg) {

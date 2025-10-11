@@ -1,8 +1,8 @@
 import app_types.{
   type Conversation, type LoginState, type Msg, type NewConversation,
   Conversation, LoginState, NewConversationMsg, UserConversationPartnerSelect,
-  UserModalClose, UserModalOpen, UserOnLogoutClick, UserOnMessageChange,
-  UserOnSendSubmit, UserSearchInputChange,
+  UserModalClose, UserModalOpen, UserOnDraftTextChange, UserOnLogoutClick,
+  UserOnSendSubmit, UserOnTyping, UserSearchInputChange,
 }
 import chat/shared_chat.{type ClientChatMessage}
 import conversation
@@ -146,7 +146,8 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
               attribute.disabled(selected_conversation |> option.is_none),
               attribute.value(draft_text),
               attribute.placeholder("Message..."),
-              event.on_input(UserOnMessageChange) |> event.debounce(300),
+              event.on_input(UserOnDraftTextChange),
+              event.on_input(fn(_) { UserOnTyping }) |> event.debounce(300),
             ]),
 
             html.button(

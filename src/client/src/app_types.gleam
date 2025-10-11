@@ -73,7 +73,10 @@ pub type Msg {
   IsTypingExpired(Int)
   CheckedAuth(Result(SessionDto, Error))
   NewConversationMsg(NewConversationMsg)
-  UserOnMessageChange(String)
+  //  no debounce
+  UserOnDraftTextChange(String)
+  //  debounced
+  UserOnTyping
   UserOnSendSubmit
   ApiChatMessageFetchResponse(Result(ChatConversationDto, Error))
   ApiChatMessageSendResponse(Result(ClientChatMessage, Error))
