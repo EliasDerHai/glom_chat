@@ -84,7 +84,7 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
         ..conversations
         |> conversation.sort_conversations
         |> list.map(fn(key_value) {
-          show_conversation(key_value.0, key_value.1, online)
+          show_conversation(key_value.0, key_value.1, online, session.user_id)
         })
       ]),
       // Logout Button
@@ -173,10 +173,11 @@ fn show_conversation(
   other: UserId,
   conversation: Conversation,
   online: Set(UserId),
+  self: UserId,
 ) -> Element(Msg) {
   let unread_message_count =
     conversation.messages
-    |> list.count(fn(m) { m.delivery != shared_chat.Read && m.sender == other })
+    |> list.count(fn(m) { m.delivery != shared_chat.Read && m.receiver == self })
 
   let title =
     case online |> set.contains(other) {
@@ -304,7 +305,6 @@ fn view_chat_message(
       ]),
       html.div([class("text-xs text-gray-500 flex flex-col items-end gap-1")], [
         message.sent_time
-          // TODO: convert UTC to localtime
           |> time_util.to_hhmm
           |> html.text
           |> list_extension.of_one

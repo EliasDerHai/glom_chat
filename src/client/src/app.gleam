@@ -310,19 +310,8 @@ fn handle_chat_conversation_fetch_response(
       dto
     })
 
-  let model =
-    Model(
-      LoggedIn(
-        LoginState(..login_state, selected_conversation:, conversations:),
-      ),
-      model.global_state,
-    )
-
-  // NOTE: it's possible that one message, that any message might be in both effects/confirmations
-  // this is fine because the state-machine doesn't allow READ -> DELIVERED - so we can just ignore 
-  // this edge-case
-  let effects = [
-    // confirm 'delivered' of messages (based on all fetched messages)
+  // confirm 'delivered' of messages (based on all fetched messages)
+  let #(conversations, delivered_effect) =
     ChatConfirmation(
       messages
         |> list.filter_map(fn(m) {
@@ -333,38 +322,82 @@ fn handle_chat_conversation_fetch_response(
         }),
       shared_chat_confirmation.Delivered,
     )
-      |> send_chat_confirmation(login_state.web_socket),
-    case selected_conversation {
-      None -> effect.none()
-      Some(selected_conversation) ->
-        // confirm 'read' of messages (based on selected conversation - which is about to be rendered)
-        confirm_read_messages_on_conversation_select(
-          conversations,
-          selected_conversation.id,
-          login_state.session.user_id,
-          login_state.web_socket,
-        )
-    },
-  ]
+    |> update_messages_and_send_confirmation(
+      conversations,
+      login_state.web_socket,
+    )
 
-  #(model, effect.batch(effects))
+  // confirm 'read' of messages (based on selected conversation - which is about to be rendered)
+  let #(conversations, read_effect) = case selected_conversation {
+    None -> #(conversations, effect.none())
+    Some(selected_conversation) ->
+      confirm_read_messages_on_conversation_select(
+        conversations,
+        selected_conversation.id,
+        login_state.session.user_id,
+        login_state.web_socket,
+      )
+  }
+
+  let model =
+    Model(
+      LoggedIn(
+        LoginState(..login_state, selected_conversation:, conversations:),
+      ),
+      model.global_state,
+    )
+
+  #(
+    model,
+    effect.batch(
+      // NOTE: it's possible that one message, that any message might be in both effects/confirmations
+      // this is fine because the state-machine doesn't allow READ -> DELIVERED - so we can just ignore 
+      // this edge-case
+      [delivered_effect, read_effect],
+    ),
+  )
 }
 
-// tries socket but falls back to http if not available
-fn send_chat_confirmation(
+/// patches conversations based on confirmation 
+/// (allowed since delivery-status is 'owned' by client conceptually)
+/// sends confirmation to server for persistence
+/// tries sending via socket but falls back to http if not available
+fn update_messages_and_send_confirmation(
   confirmation: ChatConfirmation,
+  conversations: Dict(UserId, Conversation),
   socket_state: SocketState,
-) -> Effect(Msg) {
-  use <- bool.guard(confirmation.message_ids |> list.is_empty, effect.none())
+) -> #(Dict(UserId, Conversation), Effect(Msg)) {
+  use <- bool.guard(confirmation.message_ids |> list.is_empty, #(
+    conversations,
+    effect.none(),
+  ))
 
   let confirm_body =
     confirmation
     |> shared_client_to_server.MessageConfirmation
     |> shared_client_to_server.to_json
 
-  io.println("confirming msg: " <> confirm_body |> json.to_string)
+  let delivery = confirmation.confirm |> shared_chat_confirmation.to_delivery
 
-  case socket_state {
+  let conversations =
+    conversations
+    |> dict.map_values(fn(_, conv) {
+      Conversation(
+        ..conv,
+        messages: conv.messages
+          |> list.map(fn(msg) {
+            case
+              confirmation.message_ids
+              |> list.contains(msg.id)
+            {
+              False -> msg
+              True -> ChatMessage(..msg, delivery:)
+            }
+          }),
+      )
+    })
+
+  let effect = case socket_state {
     Established(socket:) -> socket |> ws.send(confirm_body |> json.to_string)
     Pending(_) ->
       endpoints.post_request(
@@ -374,6 +407,8 @@ fn send_chat_confirmation(
         ApiChatMessageConfirmationResponse,
       )
   }
+
+  #(conversations, effect)
 }
 
 fn handle_new_conversation_msg(
@@ -470,6 +505,14 @@ fn handle_select(
       }
     })
 
+  let #(conversations, effect) =
+    confirm_read_messages_on_conversation_select(
+      conversations,
+      dto.id,
+      login_state.session.user_id,
+      login_state.web_socket,
+    )
+
   let model =
     Model(
       LoggedIn(
@@ -481,14 +524,6 @@ fn handle_select(
         ),
       ),
       model.global_state,
-    )
-
-  let effect =
-    confirm_read_messages_on_conversation_select(
-      conversations,
-      dto.id,
-      login_state.session.user_id,
-      login_state.web_socket,
     )
 
   #(model, effect)
@@ -514,7 +549,7 @@ fn confirm_read_messages_on_conversation_select(
     })
 
   ChatConfirmation(unread_messages, shared_chat_confirmation.Read)
-  |> send_chat_confirmation(socket_state)
+  |> update_messages_and_send_confirmation(conversations, socket_state)
 }
 
 fn send_message(model: Model) -> Effect(Msg) {
@@ -687,13 +722,7 @@ fn handle_message_received(
           )
         })
 
-      let model =
-        Model(
-          LoggedIn(LoginState(..login_state, conversations:)),
-          model.global_state,
-        )
-
-      let effect =
+      let #(conversations, effect) =
         case login_state.selected_conversation {
           // current chat is selected -> immediately confirm as 'read'
           option.Some(dto) if dto.id == message.sender ->
@@ -702,7 +731,16 @@ fn handle_message_received(
           _ -> shared_chat_confirmation.Delivered
         }
         |> ChatConfirmation([message.id], _)
-        |> send_chat_confirmation(login_state.web_socket)
+        |> update_messages_and_send_confirmation(
+          conversations,
+          login_state.web_socket,
+        )
+
+      let model =
+        Model(
+          LoggedIn(LoginState(..login_state, conversations:)),
+          model.global_state,
+        )
 
       #(model, effect)
     }
