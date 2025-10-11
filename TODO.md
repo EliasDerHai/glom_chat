@@ -4,25 +4,21 @@
 ## Code & Impl
 
 ### Core Features
-- [ ] Properly handle "message read/unread"
-- [ ] Add message history pagination
-- [ ] Add typing indicators
 - [ ] Add media attachments
     - probably [Cloudflare R2](https://www.cloudflare.com/en-gb/developer-platform/products/r2/)
-- [ ] Add cache for sessions (no db-trip for every request)
-- [ ] Add chat room/conversation management
-- [ ] Add more friendlist (currently no "blocked", no "invisible users")
+- [ ] Add concept to "block" users
 - [ ] Add voice message (record, send, receive, play)
 - [ ] Add PWA manifest
+- [ ] Add cache for sessions (no db-trip for every request)
 
 ### UI
-- [ ] Show unread message badge
 - [ ] Add accessibility improvements (keyboard navigation)
 - [ ] Make Sidebar width draggable
 
 ### Security & Auth
 - [ ] Add rate limiting
 - [ ] Add input validation and sanitization
+- [ ] Add csrf rotation
 
 
 ## Infrastructure
@@ -114,4 +110,8 @@ src/
 - [x] Implement real-time message display
 - [x] Add user search and conversation creation
 - [x] Add favicon
+~~- [ ] Add message history pagination~~
 - [x] Add user online presence indicators
+- [x] Show unread message badge
+- [x] Add typing indicators
+- [x] Properly handle "message read/unread"

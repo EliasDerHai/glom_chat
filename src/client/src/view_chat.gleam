@@ -124,7 +124,10 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
           |> list.append(case conversation_partner_is_typing {
             True -> [view_typing_indicator()]
             False -> []
-          }),
+          })
+          |> list.append([
+            html.div([attribute.id("scroll-anchor"), class("h-12")], []),
+          ]),
       ),
 
       // Message input area

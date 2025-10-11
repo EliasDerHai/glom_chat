@@ -42,6 +42,7 @@ import socket_message/shared_client_to_server
 import socket_message/shared_server_to_client.{
   IsTyping, MessageConfirmation, NewMessage, OnlineHasChanged,
 }
+import util/dom_util
 import util/time_util
 import util/toast
 import util/toast_state
@@ -266,7 +267,7 @@ fn handle_api_chat_message_send_response(model: Model, msg: ClientChatMessage) {
       model.global_state,
     )
 
-  #(model, effect.none())
+  #(model, dom_util.scroll_chat_to_bottom())
 }
 
 // loads **all** conversations incl. all messages (so full 'state')
@@ -351,9 +352,9 @@ fn handle_chat_conversation_fetch_response(
     model,
     effect.batch(
       // NOTE: it's possible that one message, that any message might be in both effects/confirmations
-      // this is fine because the state-machine doesn't allow READ -> DELIVERED - so we can just ignore 
+      // this is fine because the state-machine doesn't allow READ -> DELIVERED - so we can just ignore
       // this edge-case
-      [delivered_effect, read_effect],
+      [delivered_effect, read_effect, dom_util.scroll_chat_to_bottom()],
     ),
   )
 }
@@ -526,7 +527,7 @@ fn handle_select(
       model.global_state,
     )
 
-  #(model, effect)
+  #(model, effect.batch([effect, dom_util.scroll_chat_to_bottom()]))
 }
 
 fn confirm_read_messages_on_conversation_select(
@@ -742,7 +743,7 @@ fn handle_message_received(
           model.global_state,
         )
 
-      #(model, effect)
+      #(model, effect.batch([effect, dom_util.scroll_chat_to_bottom()]))
     }
   }
 }
