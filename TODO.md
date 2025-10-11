@@ -4,6 +4,7 @@
 ## Code & Impl
 
 ### Core Features
+- [ ] Add delete account option (+ graceful handling of conversations from still active users)
 - [ ] Add media attachments
     - probably [Cloudflare R2](https://www.cloudflare.com/en-gb/developer-platform/products/r2/)
 - [ ] Add concept to "block" users
@@ -12,6 +13,7 @@
 - [ ] Add cache for sessions (no db-trip for every request)
 
 ### UI
+- [ ] Interrupt 'is-typing' when message already delivered (effect often only wears off after)
 - [ ] Make Sidebar width draggable
 - [ ] Add accessibility improvements (enter on signup/login form)
 
