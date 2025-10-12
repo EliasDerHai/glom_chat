@@ -6,8 +6,9 @@ import app_types.{
   CheckedAuth, Conversation, Established, GlobalState, IsTypingExpired, LoggedIn,
   LoginState, LoginSuccess, Model, NewConversation, NewConversationMsg, Pending,
   PreLogin, RemoveToast, ShowToast, UserConversationPartnerSelect,
-  UserModalClose, UserModalOpen, UserOnDraftTextChange, UserOnLogoutClick,
-  UserOnSendSubmit, UserOnTyping, UserSearchInputChange, WsWrapper,
+  UserModalClose, UserModalOpen, UserOnConversationFilter, UserOnDraftTextChange,
+  UserOnLogoutClick, UserOnSendSubmit, UserOnTyping, UserSearchInputChange,
+  WsWrapper,
 }
 import chat/shared_chat.{type ClientChatMessage, ChatMessage, Sent}
 import chat/shared_chat_confirmation.{type ChatConfirmation, ChatConfirmation}
@@ -88,6 +89,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
             None,
             None,
             dict.new(),
+            "",
             set.new(),
             [],
           ),
@@ -157,6 +159,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     // ### CHAT ###
     NewConversationMsg(msg) -> handle_new_conversation_msg(model, msg)
+    UserOnConversationFilter(search) ->
+      handle_conversation_filtering(model, search)
     UserOnDraftTextChange(text) -> update_draft_message(model, text)
     UserOnTyping -> notify_typing(model)
     UserOnSendSubmit -> #(model, send_message(model))
@@ -187,6 +191,41 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
+fn handle_conversation_filtering(
+  model: Model,
+  search_conversations: String,
+) -> #(Model, Effect(Msg)) {
+  model
+  |> patch_login_state(fn(login_state) {
+    LoginState(..login_state, conversations_filter: search_conversations)
+  })
+  |> no_effect
+}
+
+fn patch_login_state(
+  model: Model,
+  patch_op: fn(LoginState) -> LoginState,
+) -> Model {
+  model
+  |> assert_logged_in
+  |> patch_op
+  |> wrap_login_state(model)
+}
+
+fn assert_logged_in(model: Model) -> LoginState {
+  let assert LoggedIn(login_state) = model.app_state
+    as "must be logged in at this point"
+  login_state
+}
+
+fn wrap_login_state(login_state: LoginState, model: Model) {
+  Model(LoggedIn(login_state), model.global_state)
+}
+
+fn no_effect(model: Model) {
+  #(model, effect.none())
+}
+
 fn remove_is_typing(model: Model, id: Int) -> #(Model, Effect(Msg)) {
   let model = case model.app_state {
     LoggedIn(login_state) -> {
@@ -201,10 +240,7 @@ fn remove_is_typing(model: Model, id: Int) -> #(Model, Effect(Msg)) {
   #(model, effect.none())
 }
 
-fn update_draft_message(
-  model: Model,
-  text: String,
-) -> #(Model, Effect(Msg)) {
+fn update_draft_message(model: Model, text: String) -> #(Model, Effect(Msg)) {
   let assert LoggedIn(login_state) = model.app_state
     as "must be logged in at this point"
   let assert Some(selected_conversation) = login_state.selected_conversation

@@ -1,8 +1,8 @@
 import app_types.{
   type Conversation, type LoginState, type Msg, type NewConversation,
   Conversation, LoginState, NewConversationMsg, UserConversationPartnerSelect,
-  UserModalClose, UserModalOpen, UserOnDraftTextChange, UserOnLogoutClick,
-  UserOnSendSubmit, UserOnTyping, UserSearchInputChange,
+  UserModalClose, UserModalOpen, UserOnConversationFilter, UserOnDraftTextChange,
+  UserOnLogoutClick, UserOnSendSubmit, UserOnTyping, UserSearchInputChange,
 }
 import chat/shared_chat.{type ClientChatMessage}
 import conversation
@@ -30,6 +30,7 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
     new_conv,
     selected_conversation,
     conversations,
+    conversations_filter,
     online,
     typing,
   ) = model
@@ -64,6 +65,7 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
             "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
           ),
           attribute.placeholder("Search chats..."),
+          event.on_input(UserOnConversationFilter),
         ]),
       ]),
 
@@ -83,6 +85,11 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
         ),
         ..conversations
         |> conversation.sort_conversations
+        |> list.filter(fn(conv) {
+          { conv.1 }.conversation_partner.v
+          |> string.lowercase
+          |> string.contains(conversations_filter |> string.lowercase)
+        })
         |> list.map(fn(key_value) {
           show_conversation(key_value.0, key_value.1, online, session.user_id)
         })

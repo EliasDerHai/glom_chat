@@ -39,6 +39,7 @@ pub type LoginState {
     new_conversation: Option(NewConversation),
     selected_conversation: Option(UserMiniDto(UserId)),
     conversations: Dict(UserId, Conversation),
+    conversations_filter: String,
     online: Set(UserId),
     typing: List(#(Int, UserId)),
   )
@@ -73,6 +74,7 @@ pub type Msg {
   IsTypingExpired(Int)
   CheckedAuth(Result(SessionDto, Error))
   NewConversationMsg(NewConversationMsg)
+  UserOnConversationFilter(String)
   //  no debounce
   UserOnDraftTextChange(String)
   //  debounced
