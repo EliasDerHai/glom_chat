@@ -480,7 +480,10 @@ fn handle_modal_open(
   #(
     Model(
       LoggedIn(
-        LoginState(..login_state, new_conversation: Some(NewConversation([]))),
+        LoginState(
+          ..login_state,
+          new_conversation: Some(NewConversation([], "")),
+        ),
       ),
       model.global_state,
     ),
@@ -502,6 +505,18 @@ fn handle_modal_close(
 }
 
 fn handle_search_input(model: Model, value: String) -> #(Model, Effect(Msg)) {
+  let model =
+    model
+    |> patch_login_state(fn(login_state) {
+      LoginState(
+        ..login_state,
+        new_conversation: login_state.new_conversation
+          |> option.map(fn(new_conversation) {
+            NewConversation(..new_conversation, search: value)
+          }),
+      )
+    })
+
   #(model, search_usernames(value))
 }
 
@@ -524,18 +539,17 @@ fn handle_search(
   let filtered_items =
     list.filter(items, fn(item) { item.id != login_state.session.user_id })
 
-  #(
-    Model(
-      LoggedIn(
-        LoginState(
-          ..login_state,
-          new_conversation: Some(NewConversation(filtered_items)),
-        ),
-      ),
-      model.global_state,
-    ),
-    effect.none(),
-  )
+  model
+  |> patch_login_state(fn(login_state) {
+    LoginState(
+      ..login_state,
+      new_conversation: login_state.new_conversation
+        |> option.map(fn(new_conv) {
+          NewConversation(..new_conv, suggestions: filtered_items)
+        }),
+    )
+  })
+  |> no_effect
 }
 
 fn handle_select(

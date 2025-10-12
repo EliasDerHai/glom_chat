@@ -54,7 +54,7 @@ pub type Conversation {
 }
 
 pub type NewConversation {
-  NewConversation(suggestions: List(UserMiniDto(UserId)))
+  NewConversation(suggestions: List(UserMiniDto(UserId)), search: String)
 }
 
 pub type SocketState {

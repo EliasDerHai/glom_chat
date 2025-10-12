@@ -60,12 +60,19 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
       ]),
       // Search Input
       html.div([class("p-4")], [
-        html.input([
-          class(
-            "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+        html.div([class("relative")], [
+          html.input([
+            class(
+              "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+            ),
+            attribute.placeholder("Search chats..."),
+            attribute.value(conversations_filter),
+            event.on_input(UserOnConversationFilter),
+          ]),
+          view_clear_input_button(
+            conversations_filter,
+            UserOnConversationFilter,
           ),
-          attribute.placeholder("Search chats..."),
-          event.on_input(UserOnConversationFilter),
         ]),
       ]),
 
@@ -145,16 +152,19 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
             event.on_submit(fn(_) { UserOnSendSubmit }),
           ],
           [
-            html.input([
-              class(
-                "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 "
-                <> "disabled:bg-gray-100 ",
-              ),
-              attribute.disabled(selected_conversation |> option.is_none),
-              attribute.value(draft_text),
-              attribute.placeholder("Message..."),
-              event.on_input(UserOnDraftTextChange),
-              event.on_input(fn(_) { UserOnTyping }) |> event.debounce(300),
+            html.div([class("relative w-full")], [
+              html.input([
+                class(
+                  "w-full border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 "
+                  <> "disabled:bg-gray-100 ",
+                ),
+                attribute.disabled(selected_conversation |> option.is_none),
+                attribute.value(draft_text),
+                attribute.placeholder("Message..."),
+                event.on_input(UserOnDraftTextChange),
+                event.on_input(fn(_) { UserOnTyping }) |> event.debounce(300),
+              ]),
+              view_clear_input_button(draft_text, UserOnDraftTextChange),
             ]),
 
             html.button(
@@ -178,6 +188,26 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
       option.None -> html.div([], [])
     },
   ])
+}
+
+fn view_clear_input_button(
+  filter: String,
+  effect: fn(String) -> Msg,
+) -> Element(Msg) {
+  case filter {
+    "" -> html.div([], [])
+    _ ->
+      html.button(
+        [
+          class(
+            "absolute right-2 top-1/2 -translate-y-1/2 size-5 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center text-gray-600 hover:text-gray-800 transition-colors",
+          ),
+          attribute.type_("button"),
+          event.on_click(effect("")),
+        ],
+        [icons.x([class("size-3")])],
+      )
+  }
 }
 
 fn show_conversation(
@@ -402,12 +432,18 @@ fn view_new_conversation(state: NewConversation) -> Element(Msg) {
             html.h3([class("text-xl font-bold text-blue-600 mb-4")], [
               html.text("Start a new conversation"),
             ]),
-            html.input([
-              class(
-                "w-full border border-gray-300 rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-              ),
-              attribute.placeholder("Search user..."),
-              event.on_input(fn(value) {
+
+            html.div([class("relative")], [
+              html.input([
+                class(
+                  "w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                ),
+                attribute.placeholder("Search user..."),
+                event.on_input(fn(value) {
+                  NewConversationMsg(UserSearchInputChange(value))
+                }),
+              ]),
+              view_clear_input_button(state.search, fn(value) {
                 NewConversationMsg(UserSearchInputChange(value))
               }),
             ]),
