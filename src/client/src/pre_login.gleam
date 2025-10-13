@@ -11,6 +11,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/element/keyed
 import lustre/event
+import request
 import rsvp
 import shared_session.{type SessionDto}
 import shared_user.{type UserDto, CreateUserDto, Username}
@@ -461,7 +462,7 @@ fn send_signup_req(
     )
     |> shared_user.create_user_dto_to_json
 
-  endpoints.post_request(
+  request.post_request(
     endpoints.users(),
     json_body,
     shared_user.decode_user_dto(),
@@ -480,7 +481,7 @@ fn send_login_req(
     )
     |> shared_user.user_loging_dto_to_json
 
-  endpoints.post_request(
+  request.post_request(
     endpoints.login(),
     json_body,
     shared_session.decode_dto(),

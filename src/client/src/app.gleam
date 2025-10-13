@@ -36,6 +36,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre_websocket as ws
 import pre_login
+import request
 import rsvp.{type Error}
 import shared_session
 import shared_user.{type UserId, type UserMiniDto, Username, UsersByUsernameDto}
@@ -68,11 +69,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
 }
 
 fn check_auth() -> Effect(Msg) {
-  endpoints.get_request(
-    endpoints.me(),
-    shared_session.decode_dto(),
-    CheckedAuth,
-  )
+  request.get_request(endpoints.me(), shared_session.decode_dto(), CheckedAuth)
 }
 
 // UPDATE ----------------------------------------------------------------------
@@ -144,7 +141,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     // ### LOGOUT ###
     UserOnLogoutClick -> {
       let logout_effect =
-        endpoints.post_request_ignore_response_body(
+        request.post_request_ignore_response_body(
           endpoints.logout(),
           json.null(),
           ApiOnLogoutResponse,
@@ -282,7 +279,7 @@ fn notify_typing(model: Model) -> #(Model, Effect(Msg)) {
 }
 
 fn fetch_conversations() -> Effect(Msg) {
-  endpoints.get_request(
+  request.get_request(
     endpoints.conversations(),
     shared_chat_conversation.chat_conversation_dto_decoder(),
     ApiChatConversationsFetchResponse,
@@ -446,7 +443,7 @@ fn update_messages_and_send_confirmation(
   let effect = case socket_state {
     Established(socket:) -> socket |> ws.send(confirm_body |> json.to_string)
     Pending(_) ->
-      endpoints.post_request(
+      request.post_request(
         endpoints.chat_confirmation(),
         confirm_body,
         shared_chat_confirmation.chat_confirmation_decoder(),
@@ -631,7 +628,7 @@ fn send_message(model: Model) -> Effect(Msg) {
       text_content: draft_text |> string.split("\n"),
     )
 
-  endpoints.post_request(
+  request.post_request(
     endpoints.chats(),
     dto |> shared_chat_creation_dto.to_json,
     shared_chat.chat_message_decoder(),
@@ -646,7 +643,7 @@ fn search_usernames(value: String) -> Effect(Msg) {
     |> UsersByUsernameDto
     |> shared_user.users_by_username_dto_to_json
 
-  endpoints.post_request(
+  request.post_request(
     endpoints.search_users(),
     json_body,
     decode.list(shared_user.decode_user_mini_dto()),

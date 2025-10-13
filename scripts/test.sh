@@ -10,5 +10,8 @@ test_dirs="src/shared src/server src/client"
 for dir in $test_dirs; do
   echo "--- Running tests in $dir ---"
   (cd "$dir" && gleam test)
-  echo "--- Tests passed in $dir ---"
+  # echo "--- Tests passed in $dir ---"
 done
+
+echo "--- Compiling load_tester ---"
+cd src/load_tester && gleam check
