@@ -1,5 +1,10 @@
+import csrf_token.{type CsrfToken}
+import encrypted_session_id.{type EncryptedSessionId}
+import gleam/erlang/process.{type Subject}
 import gleam/int
-import shared_user
+import shared_session.{type SessionDto}
+import shared_user.{type UserId}
+import stratus
 
 pub type BotId {
   BotId(v: Int)
@@ -25,4 +30,19 @@ pub fn email(id: BotId) {
 
 pub fn pw() {
   bot_pw
+}
+
+pub type BotActionMsg {
+  Ping
+  SendToUser(to: UserId)
+}
+
+pub type Bot {
+  Bot(
+    id: BotId,
+    session_id: EncryptedSessionId,
+    csrf_token: CsrfToken,
+    session: SessionDto,
+    subject: Subject(stratus.InternalMessage(BotActionMsg)),
+  )
 }

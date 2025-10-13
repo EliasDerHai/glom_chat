@@ -2,6 +2,7 @@ import bot_id.{type BotId, BotId}
 import csrf_token.{type CsrfToken}
 import encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
 import endpoints
+import gleam/erlang/process
 import gleam/http.{Post}
 import gleam/http/request.{Request}
 import gleam/http/response.{Response}
@@ -13,20 +14,31 @@ import gleam/list
 import gleam/string
 import shared_session.{type SessionDto}
 import shared_user.{CreateUserDto}
+import ws_bot
 
 pub fn main() -> Nil {
-  let bot_net =
-    list.range(0, 100)
+  let connected_bots =
+    list.range(0, 1)
     |> list.map(BotId)
     |> list.map(signup_bot)
     |> list.map(login_bot)
+    |> list.filter_map(fn(auth_result) {
+      let #(id, session, csrf, encrypted_session_id) = auth_result
+      ws_bot.connect_bot(id, session, csrf, encrypted_session_id)
+    })
 
   io.println(
-    "botnet with "
-    <> bot_net |> list.length |> int.to_string
-    <> " bots ready...",
+    "✓ "
+    <> connected_bots |> list.length |> int.to_string
+    <> " bots connected to WebSocket",
   )
-  Nil
+  process.sleep(100)
+
+  connected_bots
+  |> list.each(fn(bot) { bot |> ws_bot.send_ping })
+
+  process.sleep(100)
+  // process.sleep_forever()
 }
 
 pub fn signup_bot(id: BotId) -> BotId {
