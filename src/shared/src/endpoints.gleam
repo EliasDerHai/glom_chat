@@ -44,7 +44,7 @@ pub fn chat_confirmation() {
 
 @external(javascript, "./util/location_ffi.mjs", "getOrigin")
 fn get_origin() -> String {
-  "localhost:8000"
+  "http://localhost:8000"
 }
 
 fn get_api_url() -> String {

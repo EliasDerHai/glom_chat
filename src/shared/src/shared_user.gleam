@@ -20,6 +20,10 @@ pub type Username {
   Username(v: String)
 }
 
+pub fn v(u: Username) {
+  u.v
+}
+
 pub fn username_to_json(username: Username) -> json.Json {
   json.string(username.v)
 }
