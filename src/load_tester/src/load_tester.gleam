@@ -15,12 +15,12 @@ import gleam/string
 import ids/csrf_token.{type CsrfToken}
 import ids/encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
 import shared_session.{type SessionDto}
-import shared_user.{CreateUserDto}
+import shared_user.{type UserId, CreateUserDto}
 import socket_message/shared_client_to_server
 import stratus.{type Connection, type Message, type Next, Binary, Text, User}
 
 pub fn main() -> Nil {
-  let connected_bots =
+  let bots =
     list.range(0, 1)
     |> list.map(BotId)
     |> list.map(signup_bot)
@@ -32,13 +32,15 @@ pub fn main() -> Nil {
 
   io.println(
     "✓ "
-    <> connected_bots |> list.length |> int.to_string
+    <> bots |> list.length |> int.to_string
     <> " bots connected to WebSocket",
   )
   process.sleep(100)
 
-  connected_bots
+  bots
   |> list.each(fn(bot) { bot |> bot.send_ping })
+
+  let bots = bots |> exchange_ids
 
   process.sleep(100)
   // process.sleep_forever()
@@ -210,4 +212,17 @@ pub fn connect_bot(
     Bot(id, session_id, csrf_token, session, started.data)
   })
   |> result.replace_error("Connection failed")
+}
+
+/// every bot gets matched with his neighbors user_id (incl. overflow)
+pub fn exchange_ids(bots: List(Bot)) -> List(#(Bot, UserId)) {
+  let assert Ok(first) = bots |> list.first
+  let assert Ok(last) = bots |> list.last
+  bots
+  |> list.window_by_2
+  |> list.map(fn(tuple) {
+    let #(left, right) = tuple
+    #(left, right.session.user_id)
+  })
+  |> list.append([#(last, first.session.user_id)])
 }
