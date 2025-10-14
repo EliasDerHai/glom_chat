@@ -1,3 +1,4 @@
+import bot.{type Bot}
 import chat/shared_chat_creation_dto.{ChatMessageCreationDto}
 import endpoints
 import gleam/erlang/process.{type Subject}
@@ -12,6 +13,7 @@ import gleam/otp/actor.{type Next, type StartError}
 import gleam/result
 import gleam/string
 import ids/csrf_token.{type CsrfToken}
+import ids/encrypted_session_id.{type EncryptedSessionId}
 import shared_user.{type UserId}
 
 pub type HttpSenderMsg {
@@ -25,13 +27,11 @@ pub type Stats {
 }
 
 type State {
-  State(csrf_token: CsrfToken, sent: Int, success: Int, failed: Int)
+  State(bot: Bot, sent: Int, success: Int, failed: Int)
 }
 
-pub fn start(
-  csrf_token: CsrfToken,
-) -> Result(Subject(HttpSenderMsg), StartError) {
-  actor.new(State(csrf_token: csrf_token, sent: 0, success: 0, failed: 0))
+pub fn start(bot: Bot) -> Result(Subject(HttpSenderMsg), StartError) {
+  actor.new(State(bot:, sent: 0, success: 0, failed: 0))
   |> actor.on_message(handle_message)
   |> actor.start
   |> result.map(fn(started) { started.data })
@@ -43,11 +43,15 @@ fn handle_message(
 ) -> Next(State, HttpSenderMsg) {
   case msg {
     SendMessage(to, content, reply_to) -> {
-      let csrf = state.csrf_token
-
       let _pid =
         process.spawn_unlinked(fn() {
-          let result = send_http_message(to, content, csrf)
+          let result =
+            send_http_message(
+              to,
+              content,
+              state.bot.csrf_token,
+              state.bot.session_id,
+            )
           process.send(reply_to, HttpResult(result))
         })
 
@@ -92,6 +96,7 @@ fn send_http_message(
   to: UserId,
   content: String,
   csrf: CsrfToken,
+  encrypted_session_id: EncryptedSessionId,
 ) -> Result(Response(String), HttpError) {
   Request(
     ..endpoints.chats(),
@@ -104,6 +109,8 @@ fn send_http_message(
       |> shared_chat_creation_dto.to_json
       |> json.to_string,
   )
+  |> request.set_cookie("session_id", encrypted_session_id.v)
+  |> request.set_cookie("csrf_token", csrf.v)
   |> httpc.send
 }
 

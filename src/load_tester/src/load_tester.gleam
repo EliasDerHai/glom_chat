@@ -1,6 +1,7 @@
 import bot.{type Bot, type BotActionMsg, type BotId, Bot, BotId}
 import endpoints
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject}
+import gleam/float
 import gleam/http.{Post}
 import gleam/http/request.{Request}
 import gleam/http/response.{Response}
@@ -15,44 +16,96 @@ import gleam/string
 import http_sender
 import ids/csrf_token.{type CsrfToken}
 import ids/encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
-import shared_session.{type SessionDto}
+import shared_session
 import shared_user.{type UserId, CreateUserDto}
 import socket_message/shared_client_to_server
-import stratus.{type Connection, type Message, type Next, Binary, Text, User}
+import stratus.{
+  type Connection, type InternalMessage, type Message, type Next, Binary, Text,
+  User,
+}
+
+fn init(bots: Int) {
+  list.range(0, bots - 1)
+  |> list.map(BotId)
+  |> list.map(signup_bot)
+  |> list.map(login_bot)
+  |> list.map(connect_bot)
+  |> exchange_ids
+  |> list.map(fn(tuple) {
+    let #(bot, ws_subject, receiver_id) = tuple
+    let assert Ok(http_subject) = http_sender.start(tuple.0)
+    #(bot, ws_subject, http_subject, receiver_id)
+  })
+}
 
 pub fn main() -> Nil {
-  let bots =
-    list.range(0, 2)
-    |> list.map(BotId)
-    |> list.map(signup_bot)
-    |> list.map(login_bot)
-    |> list.filter_map(fn(auth_result) {
-      let #(id, session, csrf, encrypted_session_id) = auth_result
-      connect_bot(id, session, csrf, encrypted_session_id)
-    })
+  let bot_count = 5
+  let interval_ms = 10
+  let test_duration_ms = 10_000
+  let iterations = test_duration_ms / interval_ms
 
-  io.println(
-    "✓ "
-    <> bots |> list.length |> int.to_string
-    <> " bots connected to WebSocket",
-  )
+  let bots = init(bot_count)
+
+  io.println("✓ " <> bots |> list.length |> int.to_string <> " bots prepared")
   process.sleep(100)
 
-  bots
-  |> list.each(fn(bot) { bot |> bot.send_ping })
+  io.println(
+    "\nStarting load test: 100 "
+    <> iterations |> int.to_string
+    <> "iterations, "
+    <> interval_ms |> int.to_string
+    <> "ms interval, "
+    <> test_duration_ms |> int.to_string
+    <> "s total\n",
+  )
 
-  let bots = bots |> exchange_ids
-
-  let actors =
+  list.range(1, iterations)
+  |> list.each(fn(iteration) {
     bots
-    |> list.map(fn(tuple) {
-      let #(bot, receiver_id) = tuple
-      let assert Ok(actor) = http_sender.start(bot.csrf_token)
-
-      actor
+    |> list.each(fn(tuple) {
+      let #(bot, _ws_subject, http_subject, receiver_id) = tuple
+      let content =
+        "msg-" <> bot.id |> bot.str <> "-" <> iteration |> int.to_string
+      http_sender.send(http_subject, receiver_id, content)
     })
 
-  process.sleep(10_000)
+    process.sleep(interval_ms)
+  })
+
+  io.println("\nWaiting for responses to settle...\n")
+  process.sleep(500)
+
+  io.println("\nCollecting stats from all senders...\n")
+
+  let all_stats =
+    bots
+    |> list.map(fn(tuple) { http_sender.get_stats(tuple.2) })
+
+  let total_sent = all_stats |> list.fold(0, fn(acc, s) { acc + s.sent })
+  let total_success = all_stats |> list.fold(0, fn(acc, s) { acc + s.success })
+  let total_failed = all_stats |> list.fold(0, fn(acc, s) { acc + s.failed })
+
+  io.println("\n" <> "=" |> string.repeat(50))
+  io.println("AGGREGATE STATS")
+  io.println("=" |> string.repeat(50))
+  io.println("Total sent:    " <> int.to_string(total_sent))
+  io.println("Total success: " <> int.to_string(total_success))
+  io.println("Total failed:  " <> int.to_string(total_failed))
+  io.println(
+    "Success rate:  "
+    <> {
+      case total_sent {
+        0 -> "0.0"
+        _ -> {
+          let rate =
+            int.to_float(total_success) /. int.to_float(total_sent) *. 100.0
+          float.to_string(rate)
+        }
+      }
+    }
+    <> "%",
+  )
+  io.println("=" |> string.repeat(50) <> "\n")
 }
 
 pub fn signup_bot(id: BotId) -> BotId {
@@ -92,9 +145,7 @@ pub fn signup_bot(id: BotId) -> BotId {
   id
 }
 
-pub fn login_bot(
-  id: BotId,
-) -> #(BotId, SessionDto, CsrfToken, EncryptedSessionId) {
+pub fn login_bot(id: BotId) -> Bot {
   let login_json =
     shared_user.UserLoginDto(id |> bot.username |> shared_user.v, bot.pw())
     |> shared_user.user_loging_dto_to_json
@@ -119,7 +170,7 @@ pub fn login_bot(
 
       let assert Ok(session) = body |> json.parse(shared_session.decode_dto())
 
-      #(id, session, csrf_token, session_id)
+      Bot(id, session_id, csrf_token, session)
     }
     e ->
       panic as {
@@ -165,30 +216,24 @@ fn extract_cookies_from_login_headers(
   #(session_id |> EncryptedSessionId, csrf_token |> csrf_token.CsrfToken)
 }
 
-pub fn connect_bot(
-  id: BotId,
-  session: SessionDto,
-  csrf_token: CsrfToken,
-  session_id: EncryptedSessionId,
-) -> Result(Bot, String) {
+type SocketHandle =
+  Subject(InternalMessage(BotActionMsg))
+
+pub fn connect_bot(bot: Bot) -> #(Bot, SocketHandle) {
   let assert Ok(req) =
     request.to("http://localhost:8000/ws")
     |> result.map(request.set_cookie(
       _,
       "session_id",
-      session_id |> encrypted_session_id.v,
+      bot.session_id |> encrypted_session_id.v,
     ))
 
   let builder =
     stratus.websocket(
       request: req,
-      init: fn() { #(#(id, session_id, csrf_token, session), None) },
-      loop: fn(
-        state: #(BotId, EncryptedSessionId, CsrfToken, SessionDto),
-        msg: Message(BotActionMsg),
-        conn: Connection,
-      ) -> Next(
-        #(BotId, EncryptedSessionId, CsrfToken, SessionDto),
+      init: fn() { #(bot, None) },
+      loop: fn(state: Bot, msg: Message(BotActionMsg), conn: Connection) -> Next(
+        Bot,
         BotActionMsg,
       ) {
         case msg {
@@ -204,7 +249,7 @@ pub fn connect_bot(
           }
           User(bot.SendToUser(to:)) -> {
             let message =
-              shared_client_to_server.IsTyping(session.user_id, to)
+              shared_client_to_server.IsTyping(bot.session.user_id, to)
               |> shared_client_to_server.to_json
               |> json.to_string
 
@@ -215,23 +260,22 @@ pub fn connect_bot(
       },
     )
 
-  stratus.initialize(builder)
-  |> result.map(fn(started) {
-    io.println(bot.str(id) <> " ✓ connected")
-    Bot(id, session_id, csrf_token, session, started.data)
-  })
-  |> result.replace_error("Connection failed")
+  let assert Ok(started) = stratus.initialize(builder)
+
+  io.println(bot.id |> bot.str <> " ✓ connected")
+
+  #(bot, started.data)
 }
 
 /// every bot gets matched with his neighbors user_id (incl. overflow)
-pub fn exchange_ids(bots: List(Bot)) -> List(#(Bot, UserId)) {
+pub fn exchange_ids(bots: List(#(Bot, s))) -> List(#(Bot, s, UserId)) {
   let assert Ok(first) = bots |> list.first
   let assert Ok(last) = bots |> list.last
   bots
   |> list.window_by_2
   |> list.map(fn(tuple) {
     let #(left, right) = tuple
-    #(left, right.session.user_id)
+    #(left.0, left.1, { right.0 }.session.user_id)
   })
-  |> list.append([#(last, first.session.user_id)])
+  |> list.append([#(last.0, last.1, { first.0 }.session.user_id)])
 }

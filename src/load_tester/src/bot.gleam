@@ -43,14 +43,17 @@ pub type Bot {
     session_id: EncryptedSessionId,
     csrf_token: CsrfToken,
     session: SessionDto,
-    subject: Subject(InternalMessage(BotActionMsg)),
+    // subject: Subject(InternalMessage(BotActionMsg)),
   )
 }
 
-pub fn send_ping(bot: Bot) -> Nil {
-  process.send(bot.subject, stratus.to_user_message(Ping))
+pub fn send_ping(subject: Subject(InternalMessage(BotActionMsg))) -> Nil {
+  process.send(subject, stratus.to_user_message(Ping))
 }
 
-pub fn send_message(bot: Bot, to: UserId) -> Nil {
-  process.send(bot.subject, stratus.to_user_message(SendToUser(to)))
+pub fn send_message(
+  subject: Subject(InternalMessage(BotActionMsg)),
+  to: UserId,
+) -> Nil {
+  process.send(subject, stratus.to_user_message(SendToUser(to)))
 }
