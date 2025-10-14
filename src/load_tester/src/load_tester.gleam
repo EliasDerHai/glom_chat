@@ -12,6 +12,7 @@ import gleam/list
 import gleam/option.{None}
 import gleam/result
 import gleam/string
+import http_sender
 import ids/csrf_token.{type CsrfToken}
 import ids/encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
 import shared_session.{type SessionDto}
@@ -21,7 +22,7 @@ import stratus.{type Connection, type Message, type Next, Binary, Text, User}
 
 pub fn main() -> Nil {
   let bots =
-    list.range(0, 1)
+    list.range(0, 2)
     |> list.map(BotId)
     |> list.map(signup_bot)
     |> list.map(login_bot)
@@ -42,8 +43,16 @@ pub fn main() -> Nil {
 
   let bots = bots |> exchange_ids
 
-  process.sleep(100)
-  // process.sleep_forever()
+  let actors =
+    bots
+    |> list.map(fn(tuple) {
+      let #(bot, receiver_id) = tuple
+      let assert Ok(actor) = http_sender.start(bot.csrf_token)
+
+      actor
+    })
+
+  process.sleep(10_000)
 }
 
 pub fn signup_bot(id: BotId) -> BotId {
