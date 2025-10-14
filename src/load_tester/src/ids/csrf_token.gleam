@@ -5,4 +5,3 @@ pub type CsrfToken {
 pub fn v(t: CsrfToken) {
   t.v
 }
-

@@ -1,6 +1,4 @@
-import bot_id.{type BotId, BotId}
-import csrf_token.{type CsrfToken}
-import encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
+import bot.{type Bot, type BotActionMsg, type BotId, Bot, BotId}
 import endpoints
 import gleam/erlang/process
 import gleam/http.{Post}
@@ -11,10 +9,15 @@ import gleam/int
 import gleam/io
 import gleam/json
 import gleam/list
+import gleam/option.{None}
+import gleam/result
 import gleam/string
+import ids/csrf_token.{type CsrfToken}
+import ids/encrypted_session_id.{type EncryptedSessionId, EncryptedSessionId}
 import shared_session.{type SessionDto}
 import shared_user.{CreateUserDto}
-import ws_bot
+import socket_message/shared_client_to_server
+import stratus.{type Connection, type Message, type Next, Binary, Text, User}
 
 pub fn main() -> Nil {
   let connected_bots =
@@ -24,7 +27,7 @@ pub fn main() -> Nil {
     |> list.map(login_bot)
     |> list.filter_map(fn(auth_result) {
       let #(id, session, csrf, encrypted_session_id) = auth_result
-      ws_bot.connect_bot(id, session, csrf, encrypted_session_id)
+      connect_bot(id, session, csrf, encrypted_session_id)
     })
 
   io.println(
@@ -35,7 +38,7 @@ pub fn main() -> Nil {
   process.sleep(100)
 
   connected_bots
-  |> list.each(fn(bot) { bot |> ws_bot.send_ping })
+  |> list.each(fn(bot) { bot |> bot.send_ping })
 
   process.sleep(100)
   // process.sleep_forever()
@@ -43,7 +46,7 @@ pub fn main() -> Nil {
 
 pub fn signup_bot(id: BotId) -> BotId {
   let signup_json =
-    CreateUserDto(id |> bot_id.username, id |> bot_id.email, bot_id.pw())
+    CreateUserDto(id |> bot.username, id |> bot.email, bot.pw())
     |> shared_user.create_user_dto_to_json
     |> json.to_string
 
@@ -60,20 +63,18 @@ pub fn signup_bot(id: BotId) -> BotId {
   case httpc.send(signup) {
     Ok(resp) ->
       case resp {
-        Response(201, _, _) -> io.println(id |> bot_id.str <> " signed up")
+        Response(201, _, _) -> io.println(id |> bot.str <> " signed up")
         Response(_, _, "username-taken") ->
-          io.println(id |> bot_id.str <> "'s signup is noop")
+          io.println(id |> bot.str <> "'s signup is noop")
         e ->
           panic as {
-              id |> bot_id.str
-              <> "'s signup failed with: "
-              <> e |> string.inspect
+              id |> bot.str <> "'s signup failed with: " <> e |> string.inspect
             }
       }
 
     Error(e) ->
       panic as {
-          id |> bot_id.str <> "'s signup failed with: " <> e |> string.inspect
+          id |> bot.str <> "'s signup failed with: " <> e |> string.inspect
         }
   }
 
@@ -84,10 +85,7 @@ pub fn login_bot(
   id: BotId,
 ) -> #(BotId, SessionDto, CsrfToken, EncryptedSessionId) {
   let login_json =
-    shared_user.UserLoginDto(
-      id |> bot_id.username |> shared_user.v,
-      bot_id.pw(),
-    )
+    shared_user.UserLoginDto(id |> bot.username |> shared_user.v, bot.pw())
     |> shared_user.user_loging_dto_to_json
     |> json.to_string
 
@@ -103,7 +101,7 @@ pub fn login_bot(
 
   case httpc.send(login) {
     Ok(Response(200, headers, body)) -> {
-      io.println(id |> bot_id.str <> " logged in")
+      io.println(id |> bot.str <> " logged in")
 
       let #(session_id, csrf_token) =
         extract_cookies_from_login_headers(headers)
@@ -114,7 +112,7 @@ pub fn login_bot(
     }
     e ->
       panic as {
-          id |> bot_id.str <> "'s login failed with: " <> e |> string.inspect
+          id |> bot.str <> "'s login failed with: " <> e |> string.inspect
         }
   }
 }
@@ -154,4 +152,62 @@ fn extract_cookies_from_login_headers(
     ab |> list.find(fn(el) { el.0 == "csrf_token" })
 
   #(session_id |> EncryptedSessionId, csrf_token |> csrf_token.CsrfToken)
+}
+
+pub fn connect_bot(
+  id: BotId,
+  session: SessionDto,
+  csrf_token: CsrfToken,
+  session_id: EncryptedSessionId,
+) -> Result(Bot, String) {
+  let assert Ok(req) =
+    request.to("http://localhost:8000/ws")
+    |> result.map(request.set_cookie(
+      _,
+      "session_id",
+      session_id |> encrypted_session_id.v,
+    ))
+
+  let builder =
+    stratus.websocket(
+      request: req,
+      init: fn() { #(#(id, session_id, csrf_token, session), None) },
+      loop: fn(
+        state: #(BotId, EncryptedSessionId, CsrfToken, SessionDto),
+        msg: Message(BotActionMsg),
+        conn: Connection,
+      ) -> Next(
+        #(BotId, EncryptedSessionId, CsrfToken, SessionDto),
+        BotActionMsg,
+      ) {
+        case msg {
+          Text(text) -> {
+            io.println("← " <> text)
+            stratus.continue(state)
+          }
+          Binary(_) -> stratus.continue(state)
+          User(bot.Ping) -> {
+            io.println("→ sending ping")
+            let _ = stratus.send_text_message(conn, "ping")
+            stratus.continue(state)
+          }
+          User(bot.SendToUser(to:)) -> {
+            let message =
+              shared_client_to_server.IsTyping(session.user_id, to)
+              |> shared_client_to_server.to_json
+              |> json.to_string
+
+            let _ = stratus.send_text_message(conn, message)
+            stratus.continue(state)
+          }
+        }
+      },
+    )
+
+  stratus.initialize(builder)
+  |> result.map(fn(started) {
+    io.println(bot.str(id) <> " ✓ connected")
+    Bot(id, session_id, csrf_token, session, started.data)
+  })
+  |> result.replace_error("Connection failed")
 }
