@@ -1,10 +1,8 @@
-import gleam/erlang/process.{type Subject}
 import gleam/int
 import ids/csrf_token.{type CsrfToken}
 import ids/encrypted_session_id.{type EncryptedSessionId}
 import shared_session.{type SessionDto}
-import shared_user.{type UserId}
-import stratus.{type InternalMessage}
+import shared_user
 
 pub type BotId {
   BotId(v: Int)
@@ -32,28 +30,11 @@ pub fn pw() {
   bot_pw
 }
 
-pub type BotActionMsg {
-  Ping
-  SendToUser(to: UserId)
-}
-
 pub type Bot {
   Bot(
     id: BotId,
     session_id: EncryptedSessionId,
     csrf_token: CsrfToken,
     session: SessionDto,
-    // subject: Subject(InternalMessage(BotActionMsg)),
   )
-}
-
-pub fn send_ping(subject: Subject(InternalMessage(BotActionMsg))) -> Nil {
-  process.send(subject, stratus.to_user_message(Ping))
-}
-
-pub fn send_message(
-  subject: Subject(InternalMessage(BotActionMsg)),
-  to: UserId,
-) -> Nil {
-  process.send(subject, stratus.to_user_message(SendToUser(to)))
 }
