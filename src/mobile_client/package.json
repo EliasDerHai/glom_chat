@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:shared": "cd ../shared && gleam build --target javascript",
+    "prebuild": "npm run build:shared",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
