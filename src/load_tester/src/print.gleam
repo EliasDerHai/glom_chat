@@ -2,6 +2,7 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/result
 import gleam/string
 import http.{type HttpStats}
 import ws.{type SocketStats}
@@ -12,7 +13,7 @@ pub fn print_http_stats(http_stats: List(HttpStats)) -> Nil {
   let total_failed = http_stats |> list.fold(0, fn(acc, s) { acc + s.failed })
 
   io.println("\n" <> "=" |> string.repeat(50))
-  io.println("AGGREGATE STATS")
+  io.println("HTTP STATS")
   io.println("=" |> string.repeat(50))
   io.println("Total sent:    " <> int.to_string(total_sent))
   io.println("Total success: " <> int.to_string(total_success))
@@ -31,7 +32,7 @@ pub fn print_http_stats(http_stats: List(HttpStats)) -> Nil {
     }
     <> "%",
   )
-  io.println("=" |> string.repeat(50) <> "\n")
+  io.println("=" |> string.repeat(50))
 }
 
 pub fn print_socket_stats(
@@ -51,16 +52,63 @@ pub fn print_socket_stats(
       }
     }
 
-  io.println("\n" <> "=" |> string.repeat(50))
-  io.println("WEBSOCKET STATS")
+  let all_latencies =
+    socket_stats
+    |> list.flat_map(fn(s) { s.latencies })
+    |> list.sort(int.compare)
+
+  let percentiles = calculate_percentiles(all_latencies)
+
+  io.println("=" |> string.repeat(50))
+  io.println("SOCKET STATS")
   io.println("=" |> string.repeat(50))
   io.println("Total received:      " <> int.to_string(total_received))
   io.println(
-    "Expected      :      "
+    "Expected:            "
     <> int.to_string(expected_iterations * { socket_stats |> list.length }),
   )
   io.println(
     "Avg response time:   " <> float.to_string(avg_response_time) <> "ms",
   )
+  io.println("\nLatency Percentiles:")
+  io.println("  p50 (median):      " <> int.to_string(percentiles.0) <> "ms")
+  io.println("  p95:               " <> int.to_string(percentiles.1) <> "ms")
+  io.println("  p99:               " <> int.to_string(percentiles.2) <> "ms")
+  io.println("  p99.9:             " <> int.to_string(percentiles.3) <> "ms")
   io.println("=" |> string.repeat(50) <> "\n")
+}
+
+fn calculate_percentiles(sorted_latencies: List(Int)) -> #(Int, Int, Int, Int) {
+  let count = list.length(sorted_latencies)
+
+  case count {
+    0 -> #(0, 0, 0, 0)
+    _ -> {
+      let p50 =
+        sorted_latencies
+        |> list.drop(count * 50 / 100)
+        |> list.first
+        |> result.unwrap(0)
+
+      let p95 =
+        sorted_latencies
+        |> list.drop(count * 95 / 100)
+        |> list.first
+        |> result.unwrap(0)
+
+      let p99 =
+        sorted_latencies
+        |> list.drop(count * 99 / 100)
+        |> list.first
+        |> result.unwrap(0)
+
+      let p999 =
+        sorted_latencies
+        |> list.drop(count * 999 / 1000)
+        |> list.first
+        |> result.unwrap(0)
+
+      #(p50, p95, p99, p999)
+    }
+  }
 }

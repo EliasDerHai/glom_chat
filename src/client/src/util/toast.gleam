@@ -6,7 +6,7 @@ import gleam/time/timestamp
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
-import util/time_util
+import util/time
 
 // TYPES -----------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ pub fn encode_toast(toast: Toast) -> json.Json {
     #("id", json.int(toast.id)),
     #("content", json.string(toast.content)),
     #("toast_style", encode_toast_style(toast.toast_style)),
-    #("duration", json.int(time_util.duration_to_millis(toast.duration))),
+    #("duration", json.int(time.duration_to_millis(toast.duration))),
   ])
 }
 
@@ -72,7 +72,7 @@ pub fn decode_toast_style() -> decode.Decoder(ToastStyle) {
 pub fn create_info_toast(content: String) -> Toast {
   timestamp.to_unix_seconds_and_nanoseconds(timestamp.system_time())
   Toast(
-    time_util.millis_now(),
+    time.millis_now(),
     content: content,
     toast_style: Info,
     duration: duration.seconds(5),
@@ -82,7 +82,7 @@ pub fn create_info_toast(content: String) -> Toast {
 pub fn create_error_toast(content: String) -> Toast {
   timestamp.to_unix_seconds_and_nanoseconds(timestamp.system_time())
   Toast(
-    time_util.millis_now(),
+    time.millis_now(),
     content: content,
     toast_style: Failure,
     duration: duration.seconds(7),

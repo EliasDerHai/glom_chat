@@ -45,6 +45,7 @@ import socket_message/shared_server_to_client.{
   IsTyping, MessageConfirmation, NewMessage, OnlineHasChanged,
 }
 import util/dom_util
+import util/time
 import util/time_util
 import util/toast
 import util/toast_state
@@ -691,7 +692,7 @@ fn handle_socket_event(
               let assert LoggedIn(login_state) = model.app_state
                 as "must be logged in at this point"
 
-              let tuple = #(time_util.millis_now(), user)
+              let tuple = #(time.millis_now(), user)
               let typing = login_state.typing |> list.append([tuple])
 
               let timeout_effect =

@@ -47,7 +47,7 @@ type SocketHandle =
   Subject(InternalMessage(BotActionMsg))
 
 pub type SocketStats {
-  SocketStats(received: Int, avg_response_ms: Float)
+  SocketStats(received: Int, avg_response_ms: Float, latencies: List(Int))
 }
 
 pub fn connect_bot(bot: Bot) -> #(Bot, SocketHandle) {
@@ -109,7 +109,7 @@ pub fn connect_bot(bot: Bot) -> #(Bot, SocketHandle) {
 }
 
 fn extract_stats_from_csvs(lines: List(#(String, Int))) -> SocketStats {
-  let #(_, count, total_ms) =
+  let #(_, count, total_ms, latencies) =
     lines
     |> list.filter_map(fn(tuple) {
       let #(raw, utc_ms_received) = tuple
@@ -135,9 +135,11 @@ fn extract_stats_from_csvs(lines: List(#(String, Int))) -> SocketStats {
         _ -> Error(Nil)
       }
     })
-    |> list.fold(#(0, 0, 0), fn(acc, curr) {
-      let #(last_iteration, count, total_ms) = acc
+    |> list.fold(#(0, 0, 0, []), fn(acc, curr) {
+      let #(last_iteration, count, total_ms, latencies) = acc
       let #(bot_id, iteration, utc_ms_sent, utc_ms_received) = curr
+      let latency = utc_ms_received - utc_ms_sent
+
       case last_iteration + 1 == iteration {
         True -> Nil
         False ->
@@ -149,7 +151,13 @@ fn extract_stats_from_csvs(lines: List(#(String, Int))) -> SocketStats {
             <> " out of order!",
           )
       }
-      #(iteration, count + 1, total_ms + utc_ms_received - utc_ms_sent)
+      #(iteration, count + 1, total_ms + latency, [latency, ..latencies])
     })
-  SocketStats(count, { total_ms |> int.to_float } /. { count |> int.to_float })
+
+  let avg = case count {
+    0 -> 0.0
+    _ -> { total_ms |> int.to_float } /. { count |> int.to_float }
+  }
+
+  SocketStats(count, avg, latencies)
 }

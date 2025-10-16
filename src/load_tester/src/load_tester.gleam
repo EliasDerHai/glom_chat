@@ -1,5 +1,6 @@
 import bot.{type Bot, BotId}
 import gleam/erlang/process
+import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
@@ -63,6 +64,31 @@ pub fn main() -> Nil {
           |> string.join(";")
         h.send(http_subject, receiver_id, content)
       })
+
+      case iteration % 100 == 0 {
+        True -> {
+          let progress =
+            int.to_float(iteration)
+            /. int.to_float(iterations)
+            *. 100.0
+          let elapsed = time.millis_now() - start
+          let rate =
+            int.to_float(iteration * bot_count) /. int.to_float(elapsed) *. 1000.0
+
+          io.println(
+            "  ["
+            <> int.to_string(iteration)
+            <> "/"
+            <> int.to_string(iterations)
+            <> "] "
+            <> float.to_string(progress)
+            <> "% | "
+            <> float.to_string(rate)
+            <> " msg/s",
+          )
+        }
+        False -> Nil
+      }
 
       process.sleep(interval_ms)
     })
