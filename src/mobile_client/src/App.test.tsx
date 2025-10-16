@@ -4,6 +4,7 @@ import App from "./App";
 import * as Json from "@shared/gleam_json/gleam/json.mjs";
 import * as SharedUser from "@shared/shared/shared_user.mjs";
 import * as Prelude from "@shared/prelude.mjs";
+import * as Result from "./util/result";
 
 test("renders without crashing", () => {
   const { baseElement } = render(<App />);
@@ -30,8 +31,8 @@ test("decodes data utilizing @shared (gleam built)", () => {
   const result: Prelude.Result<SharedUser.UserDto, Json.DecodeError$> =
     Json.parse(Json.to_string(json), SharedUser.decode_user_dto());
 
-  if (result instanceof Prelude.Ok) {
-    const actual: SharedUser.UserDto = result[0]; // NOTE: doesn't get infered -.-
+  if (Result.isOk(result)) {
+    const actual = result[0];
     expect(actual).toEqual(user);
   } else {
     throw new Error("aint ok");
