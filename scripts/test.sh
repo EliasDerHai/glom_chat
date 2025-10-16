@@ -14,4 +14,7 @@ for dir in $test_dirs; do
 done
 
 echo "--- Compiling load_tester ---"
-cd src/load_tester && gleam check
+(cd src/load_tester && gleam check)
+
+(cd src/mobile_client && pnpm run test)
+
