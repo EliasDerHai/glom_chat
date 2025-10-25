@@ -53,7 +53,7 @@ pub fn view_chat(model: LoginState) -> Element(Msg) {
     // Sidebar
     html.div([class("w-1/3 flex flex-col bg-white border-r border-gray-200")], [
       // Sidebar Header
-      html.div([class("p-4 bUserModalOpenr-b border-gray-200")], [
+      html.div([class("p-4 border-gray-200")], [
         html.h2([class("text-xl font-bold text-blue-600")], [
           html.text("Glom-chat"),
         ]),
