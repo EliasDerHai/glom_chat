@@ -5,11 +5,8 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/react";
-import * as endpoints from "@shared/shared/endpoints.mjs";
 
 const Main = () => {
-  const me = endpoints.me();
-
   return (
     <IonPage>
       <IonHeader>
