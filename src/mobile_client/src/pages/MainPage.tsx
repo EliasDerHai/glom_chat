@@ -17,8 +17,9 @@ const MainPage = () => {
   const [session, setSession] = useState<LoginState>("checking-session");
 
   useEffect(() => {
-    fetch("http://localhost:8000/auth/me")
+    fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : "logged-out"))
+      .catch((_e) => setSession("logged-out"))
       .then(setSession);
   }, []);
 

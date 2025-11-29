@@ -6,6 +6,6 @@ const LoginPage = ({
 }: {
   onLogin: (s: Session) => void;
 }) => {
-  return <span>...</span>;
+  return <span>...out</span>;
 };
 export default LoginPage;
