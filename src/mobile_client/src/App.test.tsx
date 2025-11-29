@@ -1,10 +1,18 @@
 import React from "react";
 import { render } from "@testing-library/react";
+import { vi } from "vitest";
 import App from "./App";
 import * as Json from "@shared/gleam_json/gleam/json.mjs";
 import * as SharedUser from "@shared/shared/shared_user.mjs";
 import * as Prelude from "@shared/prelude.mjs";
 import * as Result from "./util/result";
+
+globalThis.fetch = vi.fn(() =>
+  Promise.resolve({
+    ok: false,
+    json: () => Promise.resolve({}),
+  } as Response),
+);
 
 test("renders without crashing", () => {
   const { baseElement } = render(<App />);

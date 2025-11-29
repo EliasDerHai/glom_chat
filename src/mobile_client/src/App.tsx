@@ -1,5 +1,5 @@
 import { IonApp, setupIonicReact } from "@ionic/react";
-import Main from "./pages/Main";
+import MainPage from "./pages/MainPage";
 
 /* Core CSS required for Ionic components to work properly */
 import "@ionic/react/css/core.css";
@@ -32,7 +32,7 @@ setupIonicReact();
 
 const App = () => (
   <IonApp>
-    <Main />
+    <MainPage />
   </IonApp>
 );
 
