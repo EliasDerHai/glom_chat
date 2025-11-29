@@ -6,12 +6,24 @@ set -euo pipefail
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
+is_wsl() {
+  # Kernel string includes "Microsoft" or "WSL" on WSL1 and WSL2
+  grep -qiE '(microsoft|wsl)' /proc/sys/kernel/osrelease 2>/dev/null \
+    && return 0
+
+  # Fallback hints
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] && return 0
+  [[ -n "${WSL_INTEROP:-}" ]] && return 0
+
+  return 1
+}
+
 if [[ "$(uname)" == "Darwin" ]]; then
-  # macOS
   HOST_IP="localhost"
-else
-  # openSUSE (WSL)
+elif is_wsl; then
   HOST_IP=$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf)
+else
+  HOST_IP="localhost"
 fi
 
 export DATABASE_URL="postgres://postgres:postgres@${HOST_IP}:5432/glom_chat"
