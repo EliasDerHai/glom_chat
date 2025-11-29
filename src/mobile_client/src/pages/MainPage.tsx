@@ -18,12 +18,12 @@ const MainPage = () => {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : "logged-out"))
-      .catch((_e) => setSession("logged-out"))
-      .then(setSession);
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(setSession)
+      .catch(() => setSession("logged-out"));
   }, []);
 
-  function content() {
+  const content = () => {
     if (session === "checking-session") {
       return (
         <div className="flex h-full w-full items-center justify-center flex-col">
@@ -38,7 +38,7 @@ const MainPage = () => {
         <ChatPage session={session} onLogout={() => setSession("logged-out")} />
       );
     }
-  }
+  };
 
   return (
     <IonPage>
