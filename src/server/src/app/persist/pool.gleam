@@ -40,3 +40,25 @@ fn read_connection_uri(name: Name(pog.Message)) -> Result(pog.Config, Nil) {
 pub fn conn(db: DbPool) {
   pog.named_connection(db.name)
 }
+
+/// Block until the pool can serve a trivial query, or give up after
+/// `attempts_left` tries (500ms apart). Used at boot to avoid serving
+/// traffic before the pool has live connections - see fly.toml's
+/// auto_stop_machines wake-up race.
+pub fn wait_ready(db: DbPool, attempts_left: Int) -> Nil {
+  case attempts_left {
+    0 -> Nil
+    _ ->
+      case
+        pog.query("select 1")
+        |> pog.timeout(1500)
+        |> pog.execute(conn(db))
+      {
+        Ok(_) -> Nil
+        Error(_) -> {
+          process.sleep(500)
+          wait_ready(db, attempts_left - 1)
+        }
+      }
+  }
+}

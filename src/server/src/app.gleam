@@ -20,6 +20,7 @@ pub fn main() {
   // db migration and pool setup
   migration.migrate_db()
   let db = pool.init()
+  pool.wait_ready(db, 20)
   let socket_registry = registry.init()
 
   let server_host = environment.get_server_host()

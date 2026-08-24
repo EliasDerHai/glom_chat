@@ -13,6 +13,7 @@ import gleam/http.{Get, Options}
 import gleam/http/request
 import gleam/http/response
 import mist
+import pog
 import wisp.{type Response}
 import wisp/wisp_mist
 
@@ -61,7 +62,7 @@ fn handle_api_routes(
 ) -> Response {
   case sub_paths {
     // API endpoints - public (no validation needed)
-    ["ping"] -> simple_string_response(req, "pong")
+    ["ping"] -> ping_response(req, db)
     ["users"] -> user.create_user(req, db)
     ["auth", "login"] ->
       session.login(
@@ -120,8 +121,13 @@ fn serve_static_file(req: wisp.Request) -> Response {
   })
 }
 
-fn simple_string_response(req: wisp.Request, response: String) -> Response {
+fn ping_response(req: wisp.Request, db: DbPool) -> Response {
   use <- wisp.require_method(req, Get)
 
-  wisp.string_body(wisp.ok(), response)
+  case
+    pog.query("select 1") |> pog.timeout(1000) |> pog.execute(pool.conn(db))
+  {
+    Ok(_) -> wisp.string_body(wisp.ok(), "pong")
+    Error(_) -> wisp.string_body(wisp.response(503), "db unavailable")
+  }
 }
